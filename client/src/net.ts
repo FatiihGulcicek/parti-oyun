@@ -31,6 +31,9 @@ export const bus = {
 // ---------------------------------------------------------------- yardımcılar
 let uid = '';
 export const myId = () => uid;
+/** Engellediğim kullanıcılar (sunucu RLS ile de süzer; burası anlık tepki için). */
+const blocked = new Set<string>();
+export const isBlocked = (id?: string | null) => Boolean(id && blocked.has(id));
 const REASONS: Record<string, string> = {
   insufficient: 'Yetersiz elmas 💎', self_gift: 'Kendine hediye gönderemezsin', already_claimed: 'Bugünkü ödülü zaten aldın',
   bad_qty: 'Geçersiz adet', no_gift: 'Hediye bulunamadı', no_receiver: 'Alıcı odada değil', self: 'Kendini ekleyemezsin',
@@ -96,6 +99,9 @@ export async function connect(_token?: string) {
   uid = data.user.id;
   const { data: prof } = await sb.from('profiles').select('id').eq('id', uid).maybeSingle();
   if (!prof) throw new Error('no_profile');
+  const { data: bl } = await sb.from('user_blocks').select('blocked');
+  blocked.clear();
+  for (const b of bl ?? []) blocked.add(b.blocked);
   if (globalChannel) sb.removeChannel(globalChannel);
   globalChannel = sb.channel('me-' + uid)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friendships' }, async ({ new: f }: any) => {
@@ -208,6 +214,8 @@ async function joinRoom(id: string) {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, () => scheduleRebuild(ctx))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_messages', filter: `room_id=eq.${id}` }, async ({ new: m }: any) => {
       if (cur !== ctx) return;
+      if (m.kind === 'system' && m.meta?.kicked === uid) { bus.emit('room:kicked', 'Oda sahibi seni odadan attı'); return; }
+      if (m.kind === 'chat' && blocked.has(m.user_id)) return;
       const msg = await toMsg(m);
       bus.emit('chat:msg', msg);
       if (m.kind === 'system') scheduleRebuild(ctx);
@@ -235,7 +243,12 @@ async function joinRoom(id: string) {
   ctx.hb = window.setInterval(async () => {
     if (cur !== ctx) return;
     const h = await rpc('heartbeat', { p_room: id });
-    if (h && h.ok === false && cur === ctx) { await rpc('join_room', { p_room: id }); scheduleRebuild(ctx); }
+    if (h && h.ok === false && cur === ctx) {
+      const j = await rpc('join_room', { p_room: id });
+      if (cur !== ctx) return;
+      if (j?.kicked) { bus.emit('room:kicked', j.error); return; }
+      scheduleRebuild(ctx);
+    }
   }, 20_000);
 
   const [snap, { data: msgs }, { data: gp }, { data: hand }] = await Promise.all([
@@ -244,7 +257,7 @@ async function joinRoom(id: string) {
     sb.from('game_public').select('*').eq('room_id', id).maybeSingle(),
     sb.from('game_hands').select('hand,version').eq('room_id', id).eq('user_id', uid).maybeSingle(),
   ]);
-  const chat = await Promise.all((msgs ?? []).reverse().map(toMsg));
+  const chat = await Promise.all((msgs ?? []).filter((m: any) => !(m.kind === 'chat' && blocked.has(m.user_id))).reverse().map(toMsg));
   ctx.game = snap?.game;
   ctx.pub = gp; ctx.hand = hand?.hand ?? null; ctx.handVersion = hand?.version ?? -1;
   setTimeout(() => emitUno(ctx), 0);
@@ -322,7 +335,7 @@ async function handle(event: string, p: any): Promise<any> {
     }
     case 'profile:get': {
       const { data } = await sb.from('profiles').select('id,username,avatar,level,bio,charm,wealth').eq('id', p.id).maybeSingle();
-      return data ? { ok: true, profile: data } : err('Profil bulunamadı');
+      return data ? { ok: true, profile: data, blocked: blocked.has(data.id) } : err('Profil bulunamadı');
     }
     case 'profile:update': {
       const patch: any = {};
@@ -369,6 +382,21 @@ async function handle(event: string, p: any): Promise<any> {
       await sb.from('friendships').delete().or(`and(requester.eq.${uid},addressee.eq.${p.id}),and(requester.eq.${p.id},addressee.eq.${uid})`);
       return { ok: true };
     }
+    case 'user:block': {
+      const r = await rpc('block_user', { p_target: p.id });
+      if (r?.ok) { blocked.add(p.id); bus.emit('block:changed', { id: p.id, blocked: true }); }
+      return r?.ok ? r : err(r?.error ?? 'Engellenemedi');
+    }
+    case 'user:unblock': {
+      const r = await rpc('unblock_user', { p_target: p.id });
+      if (r?.ok) { blocked.delete(p.id); bus.emit('block:changed', { id: p.id, blocked: false }); }
+      return r?.ok ? r : err(r?.error ?? 'Engel kaldırılamadı');
+    }
+    case 'user:report': {
+      const r = await rpc('report_user', { p_target: p.id, p_reason: p.reason, p_details: p.details ?? '', p_room: room ?? null });
+      return r?.ok ? r : err(r?.error ?? 'Şikayet gönderilemedi');
+    }
+    case 'room:kick': return room ? rpc('kick_from_room', { p_room: room, p_user: p.userId }) : err('Odada değilsin');
     case 'user:search': {
       const q = String(p.q ?? '').replace(/[%_,()*]/g, '').slice(0, 20);
       if (q.length < 2) return { ok: true, users: [] };

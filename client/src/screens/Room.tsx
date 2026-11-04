@@ -45,11 +45,15 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     const onMsg = (m: ChatMsg) => setChat(c => [...c.slice(-80), m]);
     const onUno = (v: UnoView | null) => setUno(v);
     const onLudo = (v: LudoView | null) => setLudo(v);
+    const onKicked = (why?: string) => { toast(why || 'Odadan atıldın'); onExit(); };
+    const onBlock = (b: { id: string; blocked: boolean }) => { if (b.blocked) setChat(c => c.filter(m => !(m.kind === 'chat' && m.from?.id === b.id))); };
+    bus.on('room:kicked', onKicked); bus.on('block:changed', onBlock);
     bus.on('room:state', onState); bus.on('chat:msg', onMsg); bus.on('uno:state', onUno); bus.on('ludo:state', onLudo);
     join();
     const off = onVoice((sp, st) => { setSpeaking(new Set(sp)); setVstatus(st); });
     return () => {
       alive = false;
+      bus.off('room:kicked', onKicked); bus.off('block:changed', onBlock);
       bus.off('room:state', onState); bus.off('chat:msg', onMsg); bus.off('uno:state', onUno); bus.off('ludo:state', onLudo);
       off(); leaveVoice(); call('room:leave');
     };
@@ -186,6 +190,9 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
           onGift={() => { setGiftTo(card); setCard(null); }}
           onKick={isOwner && room.seats.some(s => s.userId === card) ? async () => {
             const r = await call('seat:kick', { userId: card }); if (!r.ok) toast(r.error!); setCard(null);
+          } : undefined}
+          onRoomKick={isOwner && card !== me.id && room.members.some(m => m.id === card) ? async () => {
+            const r = await call('room:kick', { userId: card }); toast(r.ok ? 'Kullanıcı odadan atıldı' : r.error!); setCard(null);
           } : undefined} />
       )}
       {giftTo !== undefined && (

@@ -118,6 +118,14 @@ small { color: var(--mut); font-size: 12px; }
 .action-sheet .cancel { background: transparent; color: var(--mut); }
 .user-card { text-align: center; align-items: center; }
 .user-card .bio, .profile .bio { color: var(--mut); font-size: 14px; }
+.btn.danger { background: linear-gradient(135deg, #ff4d6d, #c2185b); box-shadow: 0 6px 18px rgba(255,77,109,.35); }
+.mod-row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; width: 100%; border-top: 1px solid var(--line); padding-top: 10px; }
+.mod-row button { flex: 1; padding: 8px; border-radius: 12px; font-size: 13px; font-weight: 700; color: var(--mut); background: var(--card); }
+.blocked-tag { font-size: 12px; font-weight: 800; color: #fff; background: rgba(255,77,109,.35); padding: 2px 10px; border-radius: 999px; }
+.small-note { font-size: 13px; }
+.reason-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin: 6px 0 8px; }
+.reason-list button { padding: 11px 8px; border-radius: 12px; background: var(--card); font-weight: 700; font-size: 13px; border: 2px solid transparent; }
+.reason-list button.on { border-color: var(--pink); background: rgba(255,79,216,.15); }
 .stats { display: flex; gap: 10px; width: 100%; margin-top: 8px; }
 .stats div { flex: 1; background: var(--card); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; align-items: center; }
 
