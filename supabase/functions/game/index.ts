@@ -52,13 +52,13 @@ Deno.serve(async (req) => {
       admin.from('room_presence').select('user_id,last_seen').eq('room_id', roomId),
     ]);
     if (!room) return fail('Oda bulunamadı');
+    if (room.game !== 'uno') return fail('Bu oda Uno odası değil');
     const present = new Set((pres ?? []).filter((p: any) => Date.now() - Date.parse(p.last_seen) < ALIVE_MS).map((p: any) => p.user_id));
     if (!present.has(uid)) return fail('Odada değilsin');
     const seated: string[] = (room.seats as (string | null)[]).filter((x): x is string => Boolean(x));
 
     // ---- yeni oyun
     if (body.action === 'start') {
-      if (room.game !== 'uno') return fail('Bu oda Uno odası değil');
       if (!seated.includes(uid)) return fail('Başlatmak için koltuğa otur');
       if (room.owner_id && room.owner_id !== uid) return fail('Oyunu oda sahibi başlatır');
       const { data: old } = await admin.from('games').select('state,version').eq('room_id', roomId).maybeSingle();

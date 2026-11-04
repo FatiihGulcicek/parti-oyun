@@ -3,12 +3,13 @@ import { useApp } from '../App';
 import { bus, call, Profile } from '../net';
 import { joinVoice, leaveVoice, onVoice, setMic, unlockAudio, VoiceStatus } from '../voice';
 import UnoTable, { UnoView } from '../components/Uno';
+import LudoTable, { LudoView } from '../components/Ludo';
 import { GiftFx, GiftSheet } from '../components/Gifts';
 import UserCard from '../components/UserCard';
 
 interface SeatView { userId?: string; muted?: boolean; profile?: Profile | null; locked: boolean }
 interface RoomState {
-  id: string; name: string; topic: string; game: 'uno' | 'chat'; online: number; ownerId: string | null; voice: boolean;
+  id: string; name: string; topic: string; game: 'uno' | 'chat' | 'ludo'; online: number; ownerId: string | null; voice: boolean;
   seats: SeatView[]; members: Profile[]; unoPlayers: string[]; playing: boolean;
 }
 interface ChatMsg { id: number; from: Profile | null; text: string; kind: 'chat' | 'system' | 'gift'; at: number }
@@ -20,6 +21,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
   const [room, setRoom] = useState<RoomState | null>(null);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [uno, setUno] = useState<UnoView | null>(null);
+  const [ludo, setLudo] = useState<LudoView | null>(null);
   const [text, setText] = useState('');
   const [card, setCard] = useState<string | null>(null);
   const [giftTo, setGiftTo] = useState<string | null | undefined>(undefined);
@@ -42,12 +44,13 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     const onState = (x: RoomState) => setRoom(x);
     const onMsg = (m: ChatMsg) => setChat(c => [...c.slice(-80), m]);
     const onUno = (v: UnoView | null) => setUno(v);
-    bus.on('room:state', onState); bus.on('chat:msg', onMsg); bus.on('uno:state', onUno);
+    const onLudo = (v: LudoView | null) => setLudo(v);
+    bus.on('room:state', onState); bus.on('chat:msg', onMsg); bus.on('uno:state', onUno); bus.on('ludo:state', onLudo);
     join();
     const off = onVoice((sp, st) => { setSpeaking(new Set(sp)); setVstatus(st); });
     return () => {
       alive = false;
-      bus.off('room:state', onState); bus.off('chat:msg', onMsg); bus.off('uno:state', onUno);
+      bus.off('room:state', onState); bus.off('chat:msg', onMsg); bus.off('uno:state', onUno); bus.off('ludo:state', onLudo);
       off(); leaveVoice(); call('room:leave');
     };
   }, [roomId]);
@@ -59,7 +62,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
   const seated = mySeat >= 0;
   const myMuted = seated ? Boolean(room!.seats[mySeat].muted) : true;
   const isOwner = room?.ownerId === me.id;
-  const gameOn = Boolean(uno);
+  const gameOn = room?.game === 'ludo' ? Boolean(ludo) : Boolean(uno);
 
   // mikrofon durumu koltuk/sessiz durumunu takip eder
   useEffect(() => {
@@ -88,14 +91,15 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     if (!r.ok && r.error !== 'Çok hızlı') toast(r.error!);
   }
 
-  async function startUno() {
-    const r = await call('uno:start');
+  async function startGame() {
+    const r = await call(room?.game === 'ludo' ? 'ludo:start' : 'uno:start');
     if (!r.ok) toast(r.error!);
   }
 
   if (!room) return <div className="room loading"><div className="spinner" /></div>;
 
   const seatedCount = room.seats.filter(s => s.userId).length;
+  const maxPlayers = room.game === 'ludo' ? 4 : 6;
 
   const Seat = ({ s, i }: { s: SeatView; i: number }) => {
     const p = s.profile;
@@ -107,7 +111,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
           {p ? <span>{p.avatar}</span> : s.locked ? <span className="lock">🔒</span> : <span className="plus">＋</span>}
           {p && s.muted && <i className="muted-ic">🔇</i>}
           {p && room.ownerId === p.id && <i className="crown-ic">👑</i>}
-          {inGame && <i className="game-ic">🎴</i>}
+          {inGame && <i className="game-ic">{room.game === 'ludo' ? '🎲' : '🎴'}</i>}
         </div>
         <small>{p ? p.username : i === 0 ? 'Ev sahibi' : `${i}`}</small>
       </button>
@@ -133,12 +137,15 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
       </div>
 
       <div className="stage">
-        {room.game === 'uno' && uno ? <UnoTable view={uno} people={people} /> : room.game === 'uno' ? (
+        {room.game === 'uno' && uno ? <UnoTable view={uno} people={people} />
+          : room.game === 'ludo' && ludo ? <LudoTable view={ludo} people={people} />
+          : room.game !== 'chat' ? (
           <div className="uno-lobby">
-            <div className="uno-logo">🎴 UNO</div>
-            <p>Koltuktaki oyuncular oynar · <b>{Math.min(seatedCount, 6)}/6</b> hazır</p>
+            <div className="uno-logo">{room.game === 'ludo' ? '🎲 LUDO' : '🎴 UNO'}</div>
+            <p>Koltuktaki oyuncular oynar · <b>{Math.min(seatedCount, maxPlayers)}/{maxPlayers}</b> hazır</p>
+            {room.game === 'ludo' && <small>Kızma Birader! 6 atan taşını çıkarır, rakibin üstüne gelen taşı kırar.</small>}
             {isOwner || !room.ownerId ? (
-              <button className="btn gold big" disabled={seatedCount < 2 || !seated} onClick={startUno}>
+              <button className="btn gold big" disabled={seatedCount < 2 || !seated} onClick={startGame}>
                 {!seated ? 'Başlatmak için koltuğa otur' : seatedCount < 2 ? 'En az 2 oyuncu gerekli' : 'Oyunu başlat ▶'}
               </button>
             ) : <p className="muted">Oda sahibinin başlatması bekleniyor…</p>}

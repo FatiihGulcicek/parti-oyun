@@ -124,7 +124,7 @@ export function watchTokenRefresh() { /* supabase-js jetonu kendisi yeniler */ }
 let voiceEnabled = false;
 
 interface RoomCtx {
-  id: string; channel: RealtimeChannel; hb: number; rebuildTimer?: number;
+  id: string; game?: string; channel: RealtimeChannel; hb: number; rebuildTimer?: number;
   pub: any | null; hand: any[] | null; handVersion: number; skew: number; timeoutTimer?: number; endTimer?: number;
 }
 let cur: RoomCtx | null = null;
@@ -158,23 +158,37 @@ function scheduleRebuild(ctx: RoomCtx) {
   }, 120);
 }
 
+/** Odanın oyununa göre hakem Edge Function'ı. */
+const refereeFor = (game?: string) => game === 'ludo' ? 'ludo' : 'game';
+
+/** Oyun durumunu ekrana yayar: Uno için 'uno:state', Ludo için 'ludo:state'. */
 function emitUno(ctx: RoomCtx) {
-  if (cur !== ctx) return;
+  if (cur !== ctx || !ctx.game) return;
   clearTimeout(ctx.timeoutTimer);
   const gp = ctx.pub;
-  if (!gp || (gp.winner && Date.now() - Date.parse(gp.updated_at) > 10_000)) { bus.emit('uno:state', null); return; }
+  const ev = ctx.game === 'ludo' ? 'ludo:state' : 'uno:state';
+  if (!gp || (gp.winner && Date.now() - Date.parse(gp.updated_at) > 10_000)) { bus.emit(ev, null); return; }
   const deadline = Date.parse(gp.deadline) + ctx.skew;
+  if (ctx.game === 'ludo') {
+    bus.emit(ev, { ...gp.view, version: gp.version, deadline, serverNow: Date.now() });
+    scheduleGameTimers(ctx, gp, deadline);
+    return;
+  }
   const mine = gp.players.includes(uid) ? (ctx.hand ?? []) : null;
   // elim herkese açık durumdan geride ise (realtime sırası) bir anlığına hamle yaptırma
   const syncing = mine !== null && ctx.handVersion !== gp.version;
-  bus.emit('uno:state', { ...gp.view, myHand: mine, syncing, deadline, serverNow: Date.now() });
+  bus.emit(ev, { ...gp.view, myHand: mine, syncing, deadline, serverNow: Date.now() });
+  scheduleGameTimers(ctx, gp, deadline);
+}
+
+function scheduleGameTimers(ctx: RoomCtx, gp: any, deadline: number) {
   if (gp.winner) {
     clearTimeout(ctx.endTimer);
     ctx.endTimer = window.setTimeout(() => { emitUno(ctx); scheduleRebuild(ctx); }, 10_500);
   } else {
     // süre dolarsa odadaki herhangi biri hakemden otomatik hamle ister
     const wait = Math.max(0, deadline - Date.now()) + 1200 + Math.random() * 1500;
-    ctx.timeoutTimer = window.setTimeout(() => { if (cur === ctx) fn('game', { room: ctx.id, action: 'timeout' }); }, wait);
+    ctx.timeoutTimer = window.setTimeout(() => { if (cur === ctx) fn(refereeFor(ctx.game), { room: ctx.id, action: 'timeout' }); }, wait);
   }
 }
 
@@ -231,6 +245,7 @@ async function joinRoom(id: string) {
     sb.from('game_hands').select('hand,version').eq('room_id', id).eq('user_id', uid).maybeSingle(),
   ]);
   const chat = await Promise.all((msgs ?? []).reverse().map(toMsg));
+  ctx.game = snap?.game;
   ctx.pub = gp; ctx.hand = hand?.hand ?? null; ctx.handVersion = hand?.version ?? -1;
   setTimeout(() => emitUno(ctx), 0);
   return { ok: true, room: snap, chat };
@@ -362,6 +377,9 @@ async function handle(event: string, p: any): Promise<any> {
     }
     case 'uno:start': return room ? fn('game', { room, action: 'start' }) : err('Odada değilsin');
     case 'uno:action': return room ? fn('game', { room, move: p }) : err('Odada değilsin');
+    case 'ludo:start': return room ? fn('ludo', { room, action: 'start' }) : err('Odada değilsin');
+    case 'ludo:roll': return room ? fn('ludo', { room, move: { type: 'roll' } }) : err('Odada değilsin');
+    case 'ludo:move': return room ? fn('ludo', { room, move: { type: 'move', token: Number(p.token) } }) : err('Odada değilsin');
     case 'voice:token': {
       if (!room) return err('Odada değilsin');
       const r = await fn('voice', { room });

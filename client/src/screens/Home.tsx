@@ -3,14 +3,19 @@ import { useApp } from '../App';
 import { call } from '../net';
 
 interface RoomSummary {
-  id: string; name: string; topic: string; game: 'uno' | 'chat'; online: number; seated: number; playing: boolean;
+  id: string; name: string; topic: string; game: GameId; online: number; seated: number; playing: boolean;
   owner: { username: string; avatar: string } | null;
 }
+
+type GameId = 'uno' | 'chat' | 'ludo';
+const GAME_ICON: Record<GameId, string> = { uno: '🎴', chat: '🎙️', ludo: '🎲' };
+const GAME_TONE: Record<GameId, string> = { uno: 'g-red', chat: 'g-blue', ludo: 'g-green' };
+const GAME_NAME: Record<GameId, string> = { uno: 'Uno', chat: 'Sohbet', ludo: 'Ludo' };
 
 const GAMES = [
   { id: 'uno', name: 'Uno', icon: '🎴', color: 'g-red', ready: true },
   { id: 'chat', name: 'Sohbet', icon: '🎙️', color: 'g-blue', ready: true },
-  { id: 'ludo', name: 'Ludo', icon: '🎲', color: 'g-green', ready: false },
+  { id: 'ludo', name: 'Ludo', icon: '🎲', color: 'g-green', ready: true },
   { id: 'draw', name: 'Çiz-Tahmin', icon: '🎨', color: 'g-yellow', ready: false },
 ] as const;
 
@@ -27,8 +32,8 @@ export function WalletPill() {
 export default function Home() {
   const { me, openRoom, toast } = useApp();
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
-  const [filter, setFilter] = useState<'all' | 'uno' | 'chat'>('all');
-  const [creating, setCreating] = useState<null | 'uno' | 'chat'>(null);
+  const [filter, setFilter] = useState<'all' | GameId>('all');
+  const [creating, setCreating] = useState<null | GameId>(null);
   const [name, setName] = useState('');
 
   async function load() {
@@ -37,7 +42,7 @@ export default function Home() {
   }
   useEffect(() => { load(); const t = setInterval(load, 4000); return () => clearInterval(t); }, []);
 
-  async function quickPlay(game: 'uno' | 'chat') {
+  async function quickPlay(game: GameId) {
     const pick = rooms?.filter(r => r.game === game && !r.playing && r.seated < 9).sort((a, b) => b.online - a.online)[0];
     if (pick) openRoom(pick.id); else { setName(`${me.username} odası`); setCreating(game); }
   }
@@ -66,7 +71,7 @@ export default function Home() {
       <div className="games">
         {GAMES.map(g => (
           <button key={g.id} className={`game-tile ${g.color} ${g.ready ? '' : 'soon'}`}
-            onClick={() => g.ready ? quickPlay(g.id as 'uno' | 'chat') : toast(`${g.name} yakında geliyor!`)}>
+            onClick={() => g.ready ? quickPlay(g.id as GameId) : toast(`${g.name} yakında geliyor!`)}>
             <span className="gi">{g.icon}</span><b>{g.name}</b>{!g.ready && <em>Yakında</em>}
           </button>
         ))}
@@ -75,8 +80,8 @@ export default function Home() {
       <div className="section-head">
         <h3>Canlı odalar</h3>
         <div className="chips">
-          {(['all', 'uno', 'chat'] as const).map(f => (
-            <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'Tümü' : f === 'uno' ? 'Uno' : 'Sohbet'}</button>
+          {(['all', 'uno', 'ludo', 'chat'] as const).map(f => (
+            <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'Tümü' : GAME_NAME[f]}</button>
           ))}
         </div>
       </div>
@@ -85,7 +90,7 @@ export default function Home() {
         {rooms === null && <div className="spinner" />}
         {shown.map(r => (
           <button key={r.id} className="room-card" onClick={() => openRoom(r.id)}>
-            <div className={`room-thumb ${r.game === 'uno' ? 'g-red' : 'g-blue'}`}>{r.game === 'uno' ? '🎴' : '🎙️'}</div>
+            <div className={`room-thumb ${GAME_TONE[r.game] ?? 'g-blue'}`}>{GAME_ICON[r.game] ?? '🎙️'}</div>
             <div className="room-info">
               <b>{r.name}</b>
               <small>{r.topic || (r.owner ? `${r.owner.avatar} ${r.owner.username}` : 'Herkese açık')}</small>
@@ -107,6 +112,7 @@ export default function Home() {
             <h3>Oda oluştur</h3>
             <div className="seg">
               <button className={creating === 'uno' ? 'on' : ''} onClick={() => setCreating('uno')}>🎴 Uno</button>
+              <button className={creating === 'ludo' ? 'on' : ''} onClick={() => setCreating('ludo')}>🎲 Ludo</button>
               <button className={creating === 'chat' ? 'on' : ''} onClick={() => setCreating('chat')}>🎙️ Sohbet</button>
             </div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={30} placeholder="Oda adı" />

@@ -8,6 +8,7 @@ WePlay/TopTop tarzı sesli oda + mini oyun uygulaması. Arayüz dili **Türkçe*
 - `supabase/` (proje ref: `qtusjbviruqfwolbsvgx`, Frankfurt):
   - `migrations/`: şema. Yeni değişiklik = yeni numaralı dosya (`0003_...sql`); eskileri düzenleme.
   - `functions/game`: Uno hakemi (`uno.ts` saf motor + `index.ts`). Yeni oyun eklerken aynı kalıbı kullan: saf motor + testler + Edge Function.
+  - `functions/ludo`: Ludo (Kızma Birader) hakemi (`ludo.ts` saf motor + `index.ts`); zar sunucuda atılır. Oyun durumu Uno ile aynı `games` / `game_public` tablolarında; her hakem yalnızca kendi `rooms.game` türündeki odaları kabul eder.
   - `functions/register`: kullanıcı adı + şifreyle kayıt (e-posta `u<hex>@parti.local`, istemcideki `loginEmail` ile aynı olmalı).
   - `functions/voice`: LiveKit jetonu (secret'lar: LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET).
 
