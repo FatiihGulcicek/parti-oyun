@@ -14,6 +14,7 @@ const cors = {
 };
 const json = (b: unknown) => new Response(JSON.stringify(b), { headers: { ...cors, 'Content-Type': 'application/json' } });
 const fail = (error: string) => json({ ok: false, error });
+const BOT_MS = 900; // botun düşünme süresi
 const rnd = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
 
 async function names(ids: string[]) {
@@ -57,6 +58,10 @@ Deno.serve(async (req) => {
     const present = new Set((pres ?? []).filter((p: any) => Date.now() - Date.parse(p.last_seen) < ALIVE_MS).map((p: any) => p.user_id));
     if (!present.has(uid)) return fail('Odada değilsin');
     const seated: string[] = (room.seats as (string | null)[]).filter((x): x is string => Boolean(x));
+    // botlar odada "hazır" sayılır; hamlelerini hakem yapar
+    const { data: botRows } = seated.length ? await admin.from('profiles').select('id').in('id', seated).eq('is_bot', true) : { data: [] as any[] };
+    const bots = new Set<string>((botRows ?? []).map((b: any) => b.id));
+    for (const b of bots) present.add(b);
 
     if (body.action === 'start') {
       if (!seated.includes(uid)) return fail('Başlatmak için koltuğa otur');
@@ -67,6 +72,7 @@ Deno.serve(async (req) => {
       const players = seated.filter(p => present.has(p)).slice(0, 4);
       if (players.length < 2) return fail('En az 2 oturan oyuncu gerekli');
       const s = Okey.newGame(players, Date.now(), rnd);
+      if (bots.has(Okey.current(s))) s.next = Date.now() + BOT_MS;
       const version = (old?.version ?? 0) + 1;
       const { error } = await admin.from('games').upsert({
         room_id: roomId, state: s, version, deadline: new Date(s.next).toISOString(), updated_at: new Date().toISOString(),
@@ -100,8 +106,9 @@ Deno.serve(async (req) => {
           if (now < s.next - 500 && !changed) return fail('Süre dolmadı');
           if (now >= s.next - 500) {
             const who = Okey.current(s);
-            Okey.autoPlay(s, now, rnd); changed = true;
-            msgs.push(`⏰ ${n.get(who) ?? 'Oyuncu'} süresi doldu, otomatik oynandı`);
+            if (bots.has(who)) Okey.botMove(s, now, rnd);
+            else { Okey.autoPlay(s, now, rnd); msgs.push(`⏰ ${n.get(who) ?? 'Oyuncu'} süresi doldu, otomatik oynandı`); }
+            changed = true;
           }
         } else {
           const move = body.move as Okey.OkeyAction;
@@ -110,6 +117,7 @@ Deno.serve(async (req) => {
           catch (e) { if (!changed) return fail(e instanceof Okey.OkeyError ? e.message : 'Geçersiz hamle'); }
         }
       }
+      if (s.phase !== 'end' && bots.has(Okey.current(s))) s.next = Date.now() + BOT_MS;
       if (s.phase === 'end') msgs.push(s.winner ? `🏆 ${n.get(s.winner) ?? 'Bir oyuncu'} eli ${s.pairs ? 'ÇİFTE ile ' : ''}bitirdi ve kazandı!` : '🤝 Taşlar bitti, el berabere.');
 
       const version = g.version + 1;

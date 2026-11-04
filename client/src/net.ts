@@ -15,7 +15,7 @@ export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 export interface ServerConfig { mode: 'supabase'; voice: boolean }
-export interface Profile { id: string; username: string; avatar: string; level: number }
+export interface Profile { id: string; username: string; avatar: string; level: number; is_bot?: boolean }
 export interface FullProfile extends Profile { bio: string; charm: number; wealth: number; onboarded?: boolean }
 export interface Wallet { diamonds: number; coins: number; canClaimDaily: boolean }
 type Res<T = {}> = T & { ok: boolean; error?: string };
@@ -48,7 +48,7 @@ const profCache = new Map<string, Profile>();
 async function profiles(ids: string[], force = false): Promise<Map<string, Profile>> {
   const need = [...new Set(ids)].filter(id => id && (force || !profCache.has(id)));
   if (need.length) {
-    const { data } = await sb.from('profiles').select('id,username,avatar,level').in('id', need);
+    const { data } = await sb.from('profiles').select('id,username,avatar,level,is_bot').in('id', need);
     for (const p of data ?? []) profCache.set(p.id, p as Profile);
   }
   return profCache;
@@ -398,6 +398,8 @@ async function handle(event: string, p: any): Promise<any> {
     case 'seat:leave': return room ? rpc('leave_seat', { p_room: room }) : err('Odada değilsin');
     case 'seat:mute': return room ? rpc('set_mute', { p_room: room, p_muted: Boolean(p.muted) }) : err('Odada değilsin');
     case 'seat:lock': return room ? rpc('toggle_lock', { p_room: room, p_index: p.index }) : err('Odada değilsin');
+    case 'bot:add': return room ? rpc('add_bot', { p_room: room }) : err('Odada değilsin');
+    case 'bot:remove': return room ? rpc('remove_bot', { p_room: room, p_bot: p.id }) : err('Odada değilsin');
     case 'seat:kick': return room ? rpc('kick_seat', { p_room: room, p_user: p.userId }) : err('Odada değilsin');
     case 'chat:send': return room ? rpc('send_chat', { p_room: room, p_text: p.text }) : err('Odada değilsin');
     case 'gift:send': {

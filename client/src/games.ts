@@ -18,5 +18,8 @@ export const GAMES: Record<GameId, GameMeta> = {
   chat: { id: 'chat', name: 'Sesli Sohbet', icon: '🎙️', tone: 'chat', min: 0, max: 0, referee: null, desc: 'Koltuğa otur ve sohbete katıl!' },
 };
 
+/** Botla oynanabilen oyunlar (sunucuda 0008_bots.sql ile aynı liste). */
+export const BOT_GAMES: GameId[] = ['uno', 'ludo', 'tavla', 'okey'];
+
 export const PLAYABLE: GameId[] = ['uno', 'ludo', 'draw', 'spy', 'tavla', 'okey'];
 export const meta = (g?: string | null): GameMeta => GAMES[(g as GameId)] ?? GAMES.chat;

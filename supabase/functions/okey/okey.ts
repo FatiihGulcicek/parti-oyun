@@ -235,3 +235,37 @@ export function viewFor(s: OkeyState) {
 export function privateFor(s: OkeyState, p: string) {
   return { hand: s.hands[p] ?? [], drawn: current(s) === p ? s.drawn : null };
 }
+
+// ---------------------------------------------------------------- bot
+/** Taşın elde ne kadar "işe yaradığı": aynı sayılı farklı renkler ve aynı renkte yakın sayılar. */
+function usefulness(t: Tile, hand: Tile[], okey: { c: number; n: number }) {
+  if (isWild(t, okey)) return 99;
+  const v = valueOf(t, okey);
+  let u = 0;
+  for (const o of hand) {
+    if (o.id === t.id || isWild(o, okey)) continue;
+    const w = valueOf(o, okey);
+    if (w.n === v.n && w.c !== v.c) u += 2;
+    if (w.c === v.c) { const d = Math.abs(w.n - v.n); if (d === 1 || (v.n + w.n === 14 && (v.n === 1 || w.n === 1) && Math.max(v.n, w.n) === 13)) u += 2; else if (d === 2) u += 1; }
+    if (w.c === v.c && w.n === v.n) u += 1;
+  }
+  return u;
+}
+
+/** Bot: bitirebiliyorsa bitirir; yoksa işe yarayacaksa soldakinin taşını, değilse ortadan çeker ve en işe yaramaz taşı atar. */
+export function botMove(s: OkeyState, now: number, rnd: () => number = Math.random) {
+  const p = current(s);
+  const hand = () => s.hands[p];
+  if (s.phase === 'draw') {
+    const top = s.discards[prevOf(s)][s.discards[prevOf(s)].length - 1];
+    const take = top && (isWild(top, s.okey) || usefulness(top, hand(), s.okey) >= 4);
+    apply(s, p, { type: 'draw', from: take ? 'discard' : 'pile' }, now, rnd);
+    if (s.phase === 'end') return;
+  }
+  if (s.phase !== 'discard' || current(s) !== p) return;
+  for (const t of hand()) {
+    if (checkHand(hand().filter(x => x.id !== t.id), s.okey).ok) { apply(s, p, { type: 'finish', tile: t.id }, now, rnd); return; }
+  }
+  const worst = [...hand()].sort((a, b) => usefulness(a, hand(), s.okey) - usefulness(b, hand(), s.okey))[0];
+  apply(s, p, { type: 'discard', tile: worst.id }, now, rnd);
+}

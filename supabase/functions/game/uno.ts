@@ -241,3 +241,27 @@ export function removePlayer(s: UnoState, p: string) {
   if (s.unoVulnerable === p) s.unoVulnerable = null;
   if (s.players.length === 1) s.winner = s.players[0];
 }
+
+// ---------------------------------------------------------------- bot
+/** Bot hamlesi: oynanabilir kartlardan önce renkli/sayılı olanları, sonra özel kartları, en son joker oynar.
+ *  Joker rengi elde en çok bulunan renk seçilir; son karta düşerken UNO der. Oynayamazsa kart çeker. */
+export function botMove(s: UnoState) {
+  const p = current(s);
+  const hand = s.hands[p];
+  const playable = s.drewThisTurn ? hand.slice(-1).filter(c => canPlay(s, c)) : hand.filter(c => canPlay(s, c));
+  if (!playable.length) {
+    if (!s.drewThisTurn) apply(s, p, { type: 'draw' });
+    if (!s.winner && current(s) === p && s.drewThisTurn) {
+      const last = s.hands[p][s.hands[p].length - 1];
+      if (last && canPlay(s, last)) return botMove(s);
+      apply(s, p, { type: 'pass' });
+    }
+    return;
+  }
+  const rank = (c: Card) => (c.value === 'wild4' ? 4 : c.value === 'wild' ? 3 : /^[0-9]$/.test(c.value) ? 0 : 1);
+  const card = [...playable].sort((a, b) => rank(a) - rank(b))[0];
+  const counts: Record<string, number> = {};
+  for (const c of hand) if (c.color !== 'wild' && c.id !== card.id) counts[c.color] = (counts[c.color] ?? 0) + 1;
+  const chosenColor = (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? COLORS[0]) as Color;
+  apply(s, p, { type: 'play', cardId: card.id, chosenColor: card.color === 'wild' ? chosenColor : undefined, uno: hand.length === 2 });
+}

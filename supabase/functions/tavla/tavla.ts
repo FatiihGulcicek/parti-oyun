@@ -206,3 +206,30 @@ export function viewFor(s: TavlaState) {
     legal: legal(s).map(m => ({ from: m.from, to: m.to })), winner: s.winner, mars: s.mars, ends: s.next,
   };
 }
+
+// ---------------------------------------------------------------- bot
+/** Bot: zarı atar, her adımda en iyi görünen kurallı hamleyi seçer (topla > kır > kendi pulunun yanına > ilerle). */
+export function botMove(s: TavlaState, now: number, rnd: () => number = Math.random) {
+  const p = current(s);
+  if (s.phase === 'roll') apply(s, p, { type: 'roll' }, now, rnd);
+  const c = colorOf(s);
+  let guard = 0;
+  while (s.phase === 'move' && current(s) === p && guard++ < 8) {
+    const moves = legal(s);
+    if (!moves.length) break;
+    const score = (m: Move) => {
+      if (m.to === 'off') return 100;
+      let v = 0;
+      const dest = s.points[m.to] * sign(c);
+      if (dest === -1) v += 40;                 // rakip tek pulunu kır
+      if (dest >= 1) v += 15;                   // kendi pulunun yanına (kapı)
+      if (dest === 0) v -= 8;                   // açıkta tek pul bırakma
+      if (m.from !== 'bar' && Math.abs(s.points[m.from]) === 2) v -= 6; // kapıyı bozma
+      if (m.from === 'bar') v += 50;
+      v += m.die;                               // ilerlemek iyi
+      return v;
+    };
+    const best = moves.reduce((a, b) => (score(b) > score(a) ? b : a));
+    apply(s, p, { type: 'move', from: best.from, to: best.to }, now, rnd);
+  }
+}

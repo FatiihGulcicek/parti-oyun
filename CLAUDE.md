@@ -17,6 +17,7 @@ WePlay/TopTop tarzı sesli oda + mini oyun uygulaması. Arayüz dili **Türkçe*
   - Yönetim paneli (`client/src/screens/Admin.tsx`): tüm işlemler `admin_*` RPC'leri (0007), her biri `_is_admin()` kontrol eder ve `admin_log`'a yazar. Yönetici = `admin_emails` içindeki DOĞRULANMIŞ e-posta ya da `profiles.is_admin`. Yasaklı hesap: `profiles.banned_until` (join_room / send_chat / create_room reddeder).
   - Ayarlar `app_settings` (theme / announcement / games; herkes okur, Realtime ile anında yayılır, yazma yalnızca `admin_set_setting`).
   - Temalar `client/src/themes.ts` (+ `styles.css` içinde `html.theme-<id>` renkleri, `components/ThemeFx.tsx` süsleri). Yeni tema = THEMES'e kayıt + CSS bloğu; tarih mantığı `themes.test.ts` ile test edilir.
+  - Botlar (0008/0009): `profiles.is_bot` olan "Robo_" hesapları; yalnızca Uno, Ludo, Tavla, Okey. `add_bot`/`remove_bot` RPC'leri koltuğa oturtur; hakemler botları "odada" sayar, sıra bottaysa süreyi ~1 sn'ye kısaltıp zaman aşımında motorun `botMove`/`autoMove` stratejisini oynar. Odadan son insan çıkınca botlar kalkar (`_leave`). Strateji testleri `supabase/functions/bots.test.ts`.
   - `functions/voice`: LiveKit jetonu (secret'lar: LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET).
 
 ## Güvenlik kuralları (bozma)
