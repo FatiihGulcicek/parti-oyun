@@ -1,6 +1,7 @@
 // Bağlantı katmanı: arayüz `call(olay, veri)` ve `bus` olaylarını kullanır,
 // bu dosya bunları Supabase (RPC + Realtime + Edge Functions) çağrılarına çevirir.
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
+import { meta } from './games';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://qtusjbviruqfwolbsvgx.supabase.co';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ||
@@ -218,19 +219,25 @@ function scheduleRebuild(ctx: RoomCtx) {
   }, 120);
 }
 
-/** Odanın oyununa göre hakem Edge Function'ı. */
-const refereeFor = (game?: string) => game === 'ludo' ? 'ludo' : 'game';
+/** Odanın oyununa göre hakem Edge Function'ı (games.ts). */
+const refereeFor = (game?: string) => meta(game).referee ?? 'game';
 
-/** Oyun durumunu ekrana yayar: Uno için 'uno:state', Ludo için 'ludo:state'. */
+/**
+ * Oyun durumunu ekrana yayar. Uno: 'uno:state' (eski biçim). Diğer tüm oyunlar: 'game:state' →
+ * herkese açık görünüm + `mine` (yalnızca bana ait gizli bilgi: el, kelime…).
+ */
 function emitUno(ctx: RoomCtx) {
   if (cur !== ctx || !ctx.game) return;
   clearTimeout(ctx.timeoutTimer);
   const gp = ctx.pub;
-  const ev = ctx.game === 'ludo' ? 'ludo:state' : 'uno:state';
-  if (!gp || (gp.winner && Date.now() - Date.parse(gp.updated_at) > 10_000)) { bus.emit(ev, null); return; }
+  const ev = ctx.game === 'uno' ? 'uno:state' : 'game:state';
+  if (!gp || (gp.winner && Date.now() - Date.parse(gp.updated_at) > 12_000)) { bus.emit(ev, null); return; }
   const deadline = Date.parse(gp.deadline) + ctx.skew;
-  if (ctx.game === 'ludo') {
-    bus.emit(ev, { ...gp.view, version: gp.version, deadline, serverNow: Date.now() });
+  if (ctx.game !== 'uno') {
+    const inGame = gp.players.includes(uid);
+    const mine = inGame ? (ctx.hand ?? null) : null;
+    const syncing = inGame && ctx.hand !== null && ctx.handVersion !== gp.version;
+    bus.emit(ev, { ...gp.view, game: ctx.game, mine, syncing, version: gp.version, deadline, serverNow: Date.now() });
     scheduleGameTimers(ctx, gp, deadline);
     return;
   }
@@ -244,7 +251,7 @@ function emitUno(ctx: RoomCtx) {
 function scheduleGameTimers(ctx: RoomCtx, gp: any, deadline: number) {
   if (gp.winner) {
     clearTimeout(ctx.endTimer);
-    ctx.endTimer = window.setTimeout(() => { emitUno(ctx); scheduleRebuild(ctx); }, 10_500);
+    ctx.endTimer = window.setTimeout(() => { emitUno(ctx); scheduleRebuild(ctx); }, 12_500);
   } else {
     // süre dolarsa odadaki herhangi biri hakemden otomatik hamle ister
     const wait = Math.max(0, deadline - Date.now()) + 1200 + Math.random() * 1500;
@@ -292,6 +299,8 @@ async function joinRoom(id: string) {
       ctx.hand = h.hand; ctx.handVersion = h.version;
       emitUno(ctx);
     })
+    // Çiz-Tahmin: çizim çizgileri veritabanına yazılmadan oyuncular arasında akar
+    .on('broadcast', { event: 'draw' }, ({ payload }: any) => { if (cur === ctx && payload) bus.emit('draw:stroke', payload); })
     .subscribe((status) => { if (status === 'SUBSCRIBED' && cur === ctx) scheduleRebuild(ctx); });
 
   ctx.hb = window.setInterval(async () => {
@@ -468,6 +477,13 @@ async function handle(event: string, p: any): Promise<any> {
     case 'uno:start': return room ? fn('game', { room, action: 'start' }) : err('Odada değilsin');
     case 'uno:action': return room ? fn('game', { room, move: p }) : err('Odada değilsin');
     case 'ludo:start': return room ? fn('ludo', { room, action: 'start' }) : err('Odada değilsin');
+    case 'game:start': return cur ? fn(refereeFor(cur.game), { room: cur.id, action: 'start' }) : err('Odada değilsin');
+    case 'game:move': return cur ? fn(refereeFor(cur.game), { room: cur.id, move: p }) : err('Odada değilsin');
+    case 'draw:send': {
+      if (!cur) return err('Odada değilsin');
+      cur.channel.send({ type: 'broadcast', event: 'draw', payload: { ...p, from: uid } });
+      return { ok: true };
+    }
     case 'ludo:roll': return room ? fn('ludo', { room, move: { type: 'roll' } }) : err('Odada değilsin');
     case 'ludo:move': return room ? fn('ludo', { room, move: { type: 'move', token: Number(p.token) } }) : err('Odada değilsin');
     case 'voice:token': {

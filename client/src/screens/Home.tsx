@@ -3,17 +3,30 @@ import { useApp } from '../App';
 import { call } from '../net';
 import { IconPlus } from '../components/Icons';
 import Avatar from '../components/Avatar';
-import { ChatArt, LudoArt, UnoArt } from '../components/HeroArt';
+import { ChatArt, DrawArt, LudoArt, OkeyArt, SpyArt, TavlaArt, UnoArt } from '../components/HeroArt';
+import { GAMES, PLAYABLE, meta, type GameId } from '../games';
 import { CoinIcon, GemIcon, LevelBadge, greeting } from '../components/Currency';
 
-type GameId = 'uno' | 'chat' | 'ludo';
 interface RoomSummary {
   id: string; name: string; topic: string; game: GameId; online: number; seated: number; playing: boolean;
   owner: { username: string; avatar: string } | null;
 }
 
-const GAME_ICON: Record<GameId, string> = { uno: '🎴', chat: '🎙️', ludo: '🎲' };
-const GAME_NAME: Record<GameId, string> = { uno: 'Uno', chat: 'Sohbet', ludo: 'Ludo' };
+const GAME_ICON = (g: string) => meta(g).icon;
+const GAME_NAME = (g: string) => (g === 'chat' ? 'Sohbet' : meta(g).name);
+
+/** Oyun kartı / oda kapağı çizimi. */
+function GameArt({ g }: { g: string }) {
+  switch (g) {
+    case 'uno': return <div className="uno-art"><i /><i /><i /></div>;
+    case 'ludo': return <LudoArt />;
+    case 'draw': return <DrawArt />;
+    case 'spy': return <SpyArt />;
+    case 'tavla': return <TavlaArt />;
+    case 'okey': return <OkeyArt />;
+    default: return <ChatArt />;
+  }
+}
 
 const SLIDES: { game: GameId; title: string; text: string; cta: string; tone: string }[] = [
   { game: 'ludo', title: 'Ludo masası kuruldu!', text: 'Zarı at, rakibini kır, eve ilk sen var.', cta: 'Hemen oyna', tone: 'tone-ludo' },
@@ -104,28 +117,24 @@ export default function Home() {
 
       <HeroCarousel onPlay={quickPlay} />
 
-      <div className="section-head"><h3>Oyunlar</h3><small>{online('uno') + online('ludo') + online('chat')} kişi çevrimiçi</small></div>
+      <div className="section-head"><h3>Oyunlar</h3><small>{(rooms ?? []).reduce((n, r) => n + Number(r.online), 0)} kişi çevrimiçi</small></div>
       <div className="game-grid">
-        <button className="game-card gc-uno" onClick={() => quickPlay('uno')}>
-          <div className="gc-art uno-art"><i /><i /><i /></div>
-          <div className="gc-copy"><b>Uno</b><small>2-6 oyuncu</small></div>
-          <span className="gc-live"><i />{online('uno')}</span>
-          <span className="gc-play">Oyna</span>
-        </button>
-        <button className="game-card gc-ludo" onClick={() => quickPlay('ludo')}>
-          <div className="gc-art ludo-art"><span className="d1">🎲</span><span className="d2">🎲</span></div>
-          <div className="gc-copy"><b>Ludo</b><small>2-4 oyuncu</small></div>
-          <span className="gc-live"><i />{online('ludo')}</span>
-          <em className="gc-new">YENİ</em>
-          <span className="gc-play">Oyna</span>
-        </button>
-        <button className="game-card small gc-chat" onClick={() => quickPlay('chat')}>
+        {PLAYABLE.map(g => {
+          const m = GAMES[g];
+          return (
+            <button key={g} className={`game-card gc-${g}`} onClick={() => quickPlay(g)}>
+              <div className={`gc-art ${g === 'uno' ? 'uno-art-wrap' : ''}`}><GameArt g={g} /></div>
+              <div className="gc-copy"><b>{m.name}</b><small>{m.min === m.max ? `${m.max} oyuncu` : `${m.min}-${m.max} oyuncu`}</small></div>
+              <span className="gc-live"><i />{online(g)}</span>
+              {m.isNew && <em className="gc-new">YENİ</em>}
+              <span className="gc-play">Oyna</span>
+            </button>
+          );
+        })}
+        <button className="game-card small gc-chat wide" onClick={() => quickPlay('chat')}>
           <span className="gc-emoji">🎙️</span>
-          <div className="gc-copy"><b>Sesli Sohbet</b><small><i className="dot" />{online('chat')} kişi</small></div>
-        </button>
-        <button className="game-card small gc-draw soon" onClick={() => toast('Çiz-Tahmin yakında geliyor!')}>
-          <span className="gc-emoji">🎨</span>
-          <div className="gc-copy"><b>Çiz-Tahmin</b><small>Yakında</small></div>
+          <div className="gc-copy"><b>Sesli Sohbet</b><small><i className="dot" />{online('chat')} kişi sohbette</small></div>
+          <span className="gc-play">Gir</span>
         </button>
       </div>
 
@@ -133,9 +142,9 @@ export default function Home() {
         <h3>Canlı odalar</h3>
       </div>
       <div className="chips">
-        {(['all', 'uno', 'ludo', 'chat'] as const).map(f => (
+        {(['all', ...PLAYABLE, 'chat'] as const).map(f => (
           <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
-            {f === 'all' ? '🔥 Tümü' : `${GAME_ICON[f]} ${GAME_NAME[f]}`}
+            {f === 'all' ? '🔥 Tümü' : `${GAME_ICON(f)} ${GAME_NAME(f)}`}
           </button>
         ))}
       </div>
@@ -145,8 +154,8 @@ export default function Home() {
         {shown.map(r => (
           <button key={r.id} className="room-card" onClick={() => openRoom(r.id)}>
             <div className={`rc-cover tone-${r.game}`}>
-              {r.game === 'uno' ? <div className="uno-art"><i /><i /><i /></div> : <span className="rc-emoji">{GAME_ICON[r.game] ?? '🎙️'}</span>}
-              {r.playing ? <em className="rc-badge live">OYUNDA</em> : <em className="rc-badge">{GAME_NAME[r.game] ?? 'Oda'}</em>}
+              <div className="rc-art"><GameArt g={r.game} /></div>
+              {r.playing ? <em className="rc-badge live">OYUNDA</em> : <em className="rc-badge">{GAME_NAME(r.game)}</em>}
               <span className="rc-online"><i className="eq"><b /><b /><b /></i>{r.online}</span>
             </div>
             <div className="rc-body">
@@ -168,9 +177,9 @@ export default function Home() {
           <div className="sheet" onClick={e => e.stopPropagation()}>
             <h3>Oda oluştur</h3>
             <div className="create-pick">
-              {(['uno', 'ludo', 'chat'] as const).map(g => (
+              {([...PLAYABLE, 'chat'] as const).map(g => (
                 <button key={g} className={`tone-${g} ${creating === g ? 'on' : ''}`} onClick={() => setCreating(g)}>
-                  <span>{GAME_ICON[g]}</span>{GAME_NAME[g]}
+                  <span>{GAME_ICON(g)}</span>{GAME_NAME(g)}
                 </button>
               ))}
             </div>
