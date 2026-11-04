@@ -6,6 +6,7 @@ import UnoTable, { UnoView } from '../components/Uno';
 import LudoTable, { LudoView } from '../components/Ludo';
 import { GiftFx, GiftSheet } from '../components/Gifts';
 import UserCard from '../components/UserCard';
+import { IconBack, IconGift, IconLock, IconMic, IconMicOff, IconSeatDown, IconSend, IconSofa } from '../components/Icons';
 
 interface SeatView { userId?: string; muted?: boolean; profile?: Profile | null; locked: boolean }
 interface RoomState {
@@ -112,8 +113,8 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     return (
       <button className={`seat ${i === 0 ? 'host' : ''} ${talking ? 'talking' : ''} ${p ? 'filled' : ''}`} onClick={() => seatTap(i)}>
         <div className="seat-av">
-          {p ? <span>{p.avatar}</span> : s.locked ? <span className="lock">🔒</span> : <span className="plus">＋</span>}
-          {p && s.muted && <i className="muted-ic">🔇</i>}
+          {p ? <span>{p.avatar}</span> : s.locked ? <span className="lock"><IconLock size={20} /></span> : <span className="plus"><IconSofa size={24} /></span>}
+          {p && s.muted && <i className="muted-ic"><IconMicOff size={11} /></i>}
           {p && room.ownerId === p.id && <i className="crown-ic">👑</i>}
           {inGame && <i className="game-ic">{room.game === 'ludo' ? '🎲' : '🎴'}</i>}
         </div>
@@ -123,12 +124,15 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
   };
 
   return (
-    <div className={`room ${gameOn ? 'gaming' : ''}`} onClick={unlockAudio}>
+    <div className={`room tone-${room.game} ${gameOn ? 'gaming' : ''}`} onClick={unlockAudio}>
       <header className="room-head">
-        <button className="icon-btn" onClick={onExit}>‹</button>
+        <button className="icon-btn back" onClick={onExit} aria-label="Geri"><IconBack size={22} /></button>
         <div className="room-title">
-          <b>{room.name}</b>
-          <small>ID {room.id} · {room.voice ? (vstatus === 'on' ? '🔊 Ses açık' : vstatus === 'connecting' ? '⏳ Ses bağlanıyor' : vstatus === 'error' ? '⚠️ Ses hatası' : '🔈') : '🔈 Ses kapalı'}</small>
+          <span className="rt-cover">{room.game === 'ludo' ? '🎲' : room.game === 'uno' ? '🎴' : '🎙️'}</span>
+          <div>
+            <b>{room.name}</b>
+            <small>ID {room.id} · {room.voice ? (vstatus === 'on' ? '🔊 Ses açık' : vstatus === 'connecting' ? '⏳ Bağlanıyor' : vstatus === 'error' ? '⚠️ Ses hatası' : '🔈') : '🔈 Ses kapalı'}</small>
+          </div>
         </div>
         <button className="online-btn" onClick={() => setShowMembers(true)}>
           <span className="stack">{room.members.slice(0, 3).map(m => <i key={m.id}>{m.avatar}</i>)}</span>{room.online}
@@ -163,7 +167,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
         <div className="chat-note">🛡️ Saygılı ol. Hakaret ve spam yasaktır.</div>
         {chat.map(m => (
           <div key={m.id} className={`msg k-${m.kind}`}>
-            {m.from && <b onClick={() => setCard(m.from!.id)}>{m.from.avatar} {m.from.username}{m.kind === 'chat' ? ':' : ''}</b>} {m.text}
+            {m.from && <b onClick={() => setCard(m.from!.id)}><i className="lvc">Lv.{m.from.level}</i>{m.from.avatar} {m.from.username}{m.kind === 'chat' ? ':' : ''}</b>} {m.text}
           </div>
         ))}
       </div>
@@ -173,14 +177,16 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
       <footer className="room-bar">
         <form onSubmit={e => { e.preventDefault(); send(); }}>
           <input value={text} onChange={e => setText(e.target.value)} placeholder="Bir şey söyle…" maxLength={200} />
+          {text.trim() && <button className="send-btn" aria-label="Gönder"><IconSend size={18} /></button>}
         </form>
         {seated && (
-          <button className={`icon-btn mic ${myMuted ? 'off' : 'on'}`} onClick={() => call('seat:mute', { muted: !myMuted })}>
-            {myMuted ? '🔇' : '🎤'}
+          <button className={`icon-btn mic ${myMuted ? 'off' : 'on'}`} aria-label={myMuted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
+            onClick={() => call('seat:mute', { muted: !myMuted })}>
+            {myMuted ? <IconMicOff size={20} /> : <IconMic size={20} />}
           </button>
         )}
-        {seated && !room.unoPlayers.includes(me.id) && <button className="icon-btn" title="Koltuktan in" onClick={() => call('seat:leave')}>⬇️</button>}
-        <button className="icon-btn gift-btn" onClick={() => setGiftTo(null)}>🎁</button>
+        {seated && !room.unoPlayers.includes(me.id) && <button className="icon-btn" aria-label="Koltuktan in" title="Koltuktan in" onClick={() => call('seat:leave')}><IconSeatDown size={20} /></button>}
+        <button className="icon-btn gift-btn" aria-label="Hediye gönder" onClick={() => setGiftTo(null)}><IconGift size={22} /></button>
       </footer>
 
       <GiftFx />

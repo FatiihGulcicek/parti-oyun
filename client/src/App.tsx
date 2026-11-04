@@ -5,6 +5,7 @@ import Home from './screens/Home';
 import Friends from './screens/Friends';
 import ProfileScreen from './screens/Profile';
 import RoomScreen from './screens/Room';
+import { IconHome, IconUser, IconUsers } from './components/Icons';
 import './styles.css';
 
 interface Ctx {
@@ -80,9 +81,9 @@ export default function App() {
   const signOut = useCallback(async () => { await logout(); setMe(null); setRoomId(null); setPhase('login'); }, []);
   const setWallet = useCallback((w: Partial<Wallet>) => setWalletState(p => ({ ...p, ...w })), []);
 
-  if (phase === 'boot') return <div className="splash"><div className="logo-big">🎉</div><div className="spinner" /></div>;
+  if (phase === 'boot') return <div className="splash"><div className="brand-mark bounce">🎉</div><b className="brand-word">Parti</b><div className="spinner" /></div>;
   if (phase === 'offline') return (
-    <div className="splash"><div className="logo-big">📡</div><p>Sunucuya ulaşılamadı.</p>
+    <div className="splash"><div className="brand-mark">📡</div><p>Sunucuya ulaşılamadı.</p>
       <button className="btn primary" onClick={() => location.reload()}>Tekrar dene</button></div>
   );
   if (phase === 'login' || !me || !config) return <Login config={config!} onToken={start} />;
@@ -101,10 +102,10 @@ export default function App() {
               {tab === 'profile' && <ProfileScreen />}
             </main>
             <nav className="tabbar">
-              <button className={tab === 'home' ? 'on' : ''} onClick={() => setTab('home')}><span>🏠</span>Parti</button>
+              <button className={tab === 'home' ? 'on' : ''} onClick={() => setTab('home')}><span><IconHome /></span>Parti</button>
               <button className={tab === 'friends' ? 'on' : ''} onClick={() => setTab('friends')}>
-                <span>👥{friendBadge > 0 && <i className="badge">{friendBadge}</i>}</span>Arkadaşlar</button>
-              <button className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}><span>{me.avatar}</span>Ben</button>
+                <span><IconUsers />{friendBadge > 0 && <i className="badge">{friendBadge}</i>}</span>Arkadaşlar</button>
+              <button className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}><span><IconUser /></span>Ben</button>
             </nav>
           </>
         )}

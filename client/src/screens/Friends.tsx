@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../App';
 import { call, Profile } from '../net';
 import UserCard from '../components/UserCard';
+import { IconSearch } from '../components/Icons';
 
 type Friend = Profile & { online: boolean; room: { roomId: string; roomName: string } | null };
 
@@ -38,7 +39,7 @@ export default function Friends({ onSeen }: { onSeen: () => void }) {
   return (
     <div className="friends">
       <header className="topbar"><h2>Arkadaşlar</h2></header>
-      <input className="search" placeholder="🔍 Kullanıcı ara…" value={q} onChange={e => setQ(e.target.value)} />
+      <label className="search"><IconSearch size={20} /><input placeholder="Kullanıcı ara…" value={q} onChange={e => setQ(e.target.value)} /></label>
 
       {results.length > 0 && (
         <section>

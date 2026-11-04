@@ -1,30 +1,52 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../App';
 import { call } from '../net';
+import { IconPlus } from '../components/Icons';
 
+type GameId = 'uno' | 'chat' | 'ludo';
 interface RoomSummary {
   id: string; name: string; topic: string; game: GameId; online: number; seated: number; playing: boolean;
   owner: { username: string; avatar: string } | null;
 }
 
-type GameId = 'uno' | 'chat' | 'ludo';
 const GAME_ICON: Record<GameId, string> = { uno: '🎴', chat: '🎙️', ludo: '🎲' };
-const GAME_TONE: Record<GameId, string> = { uno: 'g-red', chat: 'g-blue', ludo: 'g-green' };
 const GAME_NAME: Record<GameId, string> = { uno: 'Uno', chat: 'Sohbet', ludo: 'Ludo' };
 
-const GAMES = [
-  { id: 'uno', name: 'Uno', icon: '🎴', color: 'g-red', ready: true },
-  { id: 'chat', name: 'Sohbet', icon: '🎙️', color: 'g-blue', ready: true },
-  { id: 'ludo', name: 'Ludo', icon: '🎲', color: 'g-green', ready: true },
-  { id: 'draw', name: 'Çiz-Tahmin', icon: '🎨', color: 'g-yellow', ready: false },
-] as const;
+const SLIDES: { game: GameId; title: string; text: string; cta: string; art: string; tone: string }[] = [
+  { game: 'ludo', title: 'Ludo masası kuruldu!', text: 'Zarı at, rakibini kır, eve ilk sen var.', cta: 'Hemen oyna', art: '🎲', tone: 'tone-ludo' },
+  { game: 'uno', title: 'UNO demeyi unutma', text: '2-6 kişilik hızlı Uno masaları seni bekliyor.', cta: 'Masaya otur', art: '🎴', tone: 'tone-uno' },
+  { game: 'chat', title: 'Sesli sohbet odaları', text: 'Koltuğa otur, mikrofonu aç, yeni insanlarla tanış.', cta: 'Odaya gir', art: '🎙️', tone: 'tone-chat' },
+];
 
 export function WalletPill() {
   const { wallet } = useApp();
   return (
     <div className="wallet-pill">
-      <span>💎 {wallet.diamonds.toLocaleString('tr-TR')}</span>
-      <span>🪙 {wallet.coins.toLocaleString('tr-TR')}</span>
+      <span className="wp-dia">💎 {wallet.diamonds.toLocaleString('tr-TR')}</span>
+      <span className="wp-coin">🪙 {wallet.coins.toLocaleString('tr-TR')}</span>
+    </div>
+  );
+}
+
+function HeroCarousel({ onPlay }: { onPlay: (g: GameId) => void }) {
+  const [i, setI] = useState(0);
+  useEffect(() => { const t = setInterval(() => setI(x => (x + 1) % SLIDES.length), 4500); return () => clearInterval(t); }, []);
+  return (
+    <div className="hero">
+      <div className="hero-track" style={{ transform: `translateX(-${i * 100}%)` }}>
+        {SLIDES.map(s => (
+          <div key={s.game} className={`hero-slide ${s.tone}`}>
+            <div className="hero-copy">
+              <h2>{s.title}</h2>
+              <p>{s.text}</p>
+              <button className="btn white small" onClick={() => onPlay(s.game)}>{s.cta} ›</button>
+            </div>
+            <div className="hero-art"><span>{s.art}</span></div>
+            <i className="hero-blob b1" /><i className="hero-blob b2" />
+          </div>
+        ))}
+      </div>
+      <div className="hero-dots">{SLIDES.map((s, k) => <button key={s.game} className={k === i ? 'on' : ''} onClick={() => setI(k)} aria-label={`${k + 1}. tanıtım`} />)}</div>
     </div>
   );
 }
@@ -54,66 +76,90 @@ export default function Home() {
     openRoom(r.roomId);
   }
 
+  const online = (g: GameId) => (rooms ?? []).filter(r => r.game === g).reduce((n, r) => n + Number(r.online), 0);
   const shown = rooms?.filter(r => filter === 'all' || r.game === filter) ?? [];
 
   return (
     <div className="home">
-      <header className="topbar">
-        <div className="me-mini"><span className="av">{me.avatar}</span><div><b>{me.username}</b><small>Lv.{me.level}</small></div></div>
+      <header className="home-top">
+        <div className="me-chip">
+          <span className="av">{me.avatar}</span>
+          <div><b>{me.username}</b><span className="lv">Lv.{me.level}</span></div>
+        </div>
         <WalletPill />
       </header>
 
-      <div className="banner">
-        <div><h2>Parti zamanı! 🎊</h2><p>Bir odaya gir, koltuğa otur, oyuna başla.</p></div>
-        <button className="btn gold" onClick={() => quickPlay('uno')}>Hızlı Oyna</button>
-      </div>
+      <HeroCarousel onPlay={quickPlay} />
 
-      <div className="games">
-        {GAMES.map(g => (
-          <button key={g.id} className={`game-tile ${g.color} ${g.ready ? '' : 'soon'}`}
-            onClick={() => g.ready ? quickPlay(g.id as GameId) : toast(`${g.name} yakında geliyor!`)}>
-            <span className="gi">{g.icon}</span><b>{g.name}</b>{!g.ready && <em>Yakında</em>}
-          </button>
-        ))}
+      <div className="section-head"><h3>Oyunlar</h3><small>{online('uno') + online('ludo') + online('chat')} kişi çevrimiçi</small></div>
+      <div className="game-grid">
+        <button className="game-card gc-uno" onClick={() => quickPlay('uno')}>
+          <div className="gc-art uno-art"><i /><i /><i /></div>
+          <div className="gc-copy"><b>Uno</b><small>2-6 oyuncu</small></div>
+          <span className="gc-live"><i />{online('uno')}</span>
+          <span className="gc-play">Oyna</span>
+        </button>
+        <button className="game-card gc-ludo" onClick={() => quickPlay('ludo')}>
+          <div className="gc-art ludo-art"><span className="d1">🎲</span><span className="d2">🎲</span></div>
+          <div className="gc-copy"><b>Ludo</b><small>2-4 oyuncu</small></div>
+          <span className="gc-live"><i />{online('ludo')}</span>
+          <em className="gc-new">YENİ</em>
+          <span className="gc-play">Oyna</span>
+        </button>
+        <button className="game-card small gc-chat" onClick={() => quickPlay('chat')}>
+          <span className="gc-emoji">🎙️</span>
+          <div className="gc-copy"><b>Sesli Sohbet</b><small><i className="dot" />{online('chat')} kişi</small></div>
+        </button>
+        <button className="game-card small gc-draw soon" onClick={() => toast('Çiz-Tahmin yakında geliyor!')}>
+          <span className="gc-emoji">🎨</span>
+          <div className="gc-copy"><b>Çiz-Tahmin</b><small>Yakında</small></div>
+        </button>
       </div>
 
       <div className="section-head">
         <h3>Canlı odalar</h3>
-        <div className="chips">
-          {(['all', 'uno', 'ludo', 'chat'] as const).map(f => (
-            <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'Tümü' : GAME_NAME[f]}</button>
-          ))}
-        </div>
+      </div>
+      <div className="chips">
+        {(['all', 'uno', 'ludo', 'chat'] as const).map(f => (
+          <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
+            {f === 'all' ? '🔥 Tümü' : `${GAME_ICON[f]} ${GAME_NAME[f]}`}
+          </button>
+        ))}
       </div>
 
-      <div className="room-list">
+      <div className="room-grid">
         {rooms === null && <div className="spinner" />}
         {shown.map(r => (
           <button key={r.id} className="room-card" onClick={() => openRoom(r.id)}>
-            <div className={`room-thumb ${GAME_TONE[r.game] ?? 'g-blue'}`}>{GAME_ICON[r.game] ?? '🎙️'}</div>
-            <div className="room-info">
+            <div className={`rc-cover tone-${r.game}`}>
+              {r.game === 'uno' ? <div className="uno-art"><i /><i /><i /></div> : <span className="rc-emoji">{GAME_ICON[r.game] ?? '🎙️'}</span>}
+              {r.playing ? <em className="rc-badge live">OYUNDA</em> : <em className="rc-badge">{GAME_NAME[r.game] ?? 'Oda'}</em>}
+              <span className="rc-online"><i className="eq"><b /><b /><b /></i>{r.online}</span>
+            </div>
+            <div className="rc-body">
               <b>{r.name}</b>
-              <small>{r.topic || (r.owner ? `${r.owner.avatar} ${r.owner.username}` : 'Herkese açık')}</small>
-              <div className="room-meta">
-                <span>🟢 {r.online} çevrimiçi</span><span>🪑 {r.seated}/9</span>
-                {r.playing && <span className="live">OYUNDA</span>}
-              </div>
+              <small>{r.owner ? <>{r.owner.avatar} {r.owner.username}</> : r.topic || 'Herkese açık'}</small>
+              <span className="rc-seats">🪑 {r.seated}/9</span>
             </div>
           </button>
         ))}
-        {rooms && shown.length === 0 && <p className="empty">Henüz oda yok. İlkini sen aç!</p>}
+        {rooms && shown.length === 0 && <p className="empty">Henüz oda yok. İlkini sen aç! 🎈</p>}
       </div>
 
-      <button className="fab" onClick={() => { setName(`${me.username} odası`); setCreating('uno'); }}>＋</button>
+      <button className="fab" aria-label="Oda aç" onClick={() => { setName(`${me.username} odası`); setCreating(filter === 'all' ? 'uno' : filter); }}>
+        <IconPlus size={28} />
+      </button>
 
       {creating && (
         <div className="sheet-bg" onClick={() => setCreating(null)}>
           <div className="sheet" onClick={e => e.stopPropagation()}>
             <h3>Oda oluştur</h3>
-            <div className="seg">
-              <button className={creating === 'uno' ? 'on' : ''} onClick={() => setCreating('uno')}>🎴 Uno</button>
-              <button className={creating === 'ludo' ? 'on' : ''} onClick={() => setCreating('ludo')}>🎲 Ludo</button>
-              <button className={creating === 'chat' ? 'on' : ''} onClick={() => setCreating('chat')}>🎙️ Sohbet</button>
+            <div className="create-pick">
+              {(['uno', 'ludo', 'chat'] as const).map(g => (
+                <button key={g} className={`tone-${g} ${creating === g ? 'on' : ''}`} onClick={() => setCreating(g)}>
+                  <span>{GAME_ICON[g]}</span>{GAME_NAME[g]}
+                </button>
+              ))}
             </div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={30} placeholder="Oda adı" />
             <button className="btn primary big" onClick={create}>Oluştur</button>

@@ -28,9 +28,12 @@ export default function Login({ onToken }: { config?: ServerConfig; onToken: (t:
 
   return (
     <div className="login">
+      <div className="login-floaters" aria-hidden>
+        {['🎴', '🎲', '🎙️', '🎁', '💎', '🎈'].map((e, i) => <span key={i} style={{ ['--i' as any]: i }}>{e}</span>)}
+      </div>
       <div className="login-hero">
-        <div className="logo-big bounce">🎉</div>
-        <h1>Parti</h1>
+        <div className="brand-mark bounce">🎉</div>
+        <h1 className="brand-word">Parti</h1>
         <p>Sesli odalar · Mini oyunlar · Yeni arkadaşlar</p>
       </div>
       <form className="card login-card" onSubmit={submit}>

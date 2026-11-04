@@ -33,20 +33,28 @@ export default function ProfileScreen() {
 
   return (
     <div className="profile">
-      <header className="topbar"><h2>Profilim</h2><WalletPill /></header>
+      <div className="profile-cover">
+        <header className="topbar"><h2>Profilim</h2><WalletPill /></header>
+      </div>
       <div className="profile-hero">
         <div className="av-xl">{me.avatar}</div>
         <h2>{me.username} <span className="lv">Lv.{me.level}</span></h2>
         <p className="bio">{me.bio || 'Henüz bir şey yazmadın.'}</p>
-        <div className="lvbar"><i style={{ width: `${pct}%` }} /></div>
-        <small className="muted">Sonraki seviye: {me.wealth.toLocaleString('tr-TR')} / {nextLv.toLocaleString('tr-TR')} servet</small>
         <div className="stats">
           <div><b>💖 {me.charm.toLocaleString('tr-TR')}</b><small>Çekicilik</small></div>
           <div><b>👑 {me.wealth.toLocaleString('tr-TR')}</b><small>Servet</small></div>
+          <div><b>⭐ {me.level}</b><small>Seviye</small></div>
         </div>
       </div>
 
+      <div className="card level-card">
+        <div className="lc-head"><b>Seviye {me.level}</b><small>{me.wealth.toLocaleString('tr-TR')} / {nextLv.toLocaleString('tr-TR')} servet</small></div>
+        <div className="lvbar"><i style={{ width: `${pct}%` }} /></div>
+        <small className="muted">Hediye gönderdikçe servetin ve seviyen artar.</small>
+      </div>
+
       <div className="card daily">
+        <span className="daily-ic">🎁</span>
         <div><b>Günlük ödül</b><small>Her gün 50 💎 + 200 🪙</small></div>
         <button className="btn gold" disabled={!wallet.canClaimDaily} onClick={claim}>{wallet.canClaimDaily ? 'Topla' : 'Alındı ✓'}</button>
       </div>
