@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { bus, call, clearPasswordRecovery, connect, isPasswordRecovery, loadConfig, logout, restoreSession, updatePassword, FullProfile, ServerConfig, Wallet } from './net';
+import { bus, call, clearPasswordRecovery, connect, isPasswordRecovery, loadConfig, loadSettings, logout, restoreSession, updatePassword, FullProfile, ServerConfig, Wallet } from './net';
+import Admin from './screens/Admin';
+import ThemeFx from './components/ThemeFx';
+import { activeTheme, type ThemeDef } from './themes';
 import Login from './screens/Login';
 import Home from './screens/Home';
 import Friends from './screens/Friends';
@@ -19,6 +22,10 @@ interface Ctx {
   openRoom: (id: string) => void;
   toast: (m: string) => void;
   signOut: () => void;
+  settings: Record<string, any>;
+  theme: ThemeDef;
+  isAdmin: boolean;
+  openAdmin: () => void;
 }
 const AppCtx = createContext<Ctx>(null as any);
 export const useApp = () => useContext(AppCtx);
@@ -34,6 +41,24 @@ export default function App() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; m: string }[]>([]);
   const [friendBadge, setFriendBadge] = useState(0);
+  const [settings, setSettings] = useState<Record<string, any>>({});
+  const [status, setStatus] = useState<{ admin: boolean; bannedUntil: string | null; banReason: string | null }>({ admin: false, bannedUntil: null, banReason: null });
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const theme = activeTheme(settings.theme, now);
+
+  // ayarlar giriş öncesi de okunur (tema giriş ekranına da uygulanır) ve canlı güncellenir
+  useEffect(() => {
+    loadSettings().then(setSettings).catch(() => {});
+    const on = (s: Record<string, any>) => setSettings(s);
+    bus.on('settings:changed', on);
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => { bus.off('settings:changed', on); clearInterval(t); };
+  }, []);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.className = root.className.split(' ').filter(c => !c.startsWith('theme-')).concat(`theme-${theme.id}`).join(' ').trim();
+  }, [theme.id]);
   const [recovery, setRecovery] = useState(isPasswordRecovery());
   useEffect(() => { const on = () => setRecovery(true); bus.on('auth:recovery', on); return () => bus.off('auth:recovery', on); }, []);
 
@@ -57,6 +82,8 @@ export default function App() {
         if (p.status === 'accepted') toast(`${avatarText(p.from.avatar)} ${p.from.username} artık arkadaşın!`);
       });
       await refreshMe();
+      const st = await call<{ admin: boolean; bannedUntil: string | null; banReason: string | null }>('status:get');
+      if (st.ok) setStatus({ admin: st.admin, bannedUntil: st.bannedUntil, banReason: st.banReason });
       setPhase('ready');
     } catch {
       await logout();
@@ -92,11 +119,14 @@ export default function App() {
   );
   if (phase === 'login' || !me || !config) return <Login config={config!} onToken={start} />;
 
-  const ctx: Ctx = { config, me, wallet, refreshMe, setWallet, openRoom, toast, signOut };
+  const ctx: Ctx = { config, me, wallet, refreshMe, setWallet, openRoom, toast, signOut, settings, theme, isAdmin: status.admin, openAdmin: () => setAdminOpen(true) };
+  const banned = status.bannedUntil && Date.parse(status.bannedUntil) > Date.now();
   return (
     <AppCtx.Provider value={ctx}>
       <div className="app">
-        {me.onboarded === false ? <Onboarding /> : roomId ? (
+        {banned ? <Banned until={status.bannedUntil!} reason={status.banReason} onOut={signOut} />
+          : adminOpen && status.admin ? <Admin onClose={() => setAdminOpen(false)} />
+          : me.onboarded === false ? <Onboarding /> : roomId ? (
           <RoomScreen key={roomId} roomId={roomId} onExit={() => { setRoomId(null); if (history.state?.room) history.back(); }} />
         ) : (
           <>
@@ -113,6 +143,7 @@ export default function App() {
             </nav>
           </>
         )}
+        {!roomId && !adminOpen && <ThemeFx theme={theme} />}
         {recovery && <NewPassword onDone={() => { clearPasswordRecovery(); setRecovery(false); }} toast={toast} />}
         <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.m}</div>)}</div>
       </div>
@@ -142,6 +173,21 @@ function NewPassword({ onDone, toast }: { onDone: () => void; toast: (m: string)
         <button className="btn primary big" disabled={busy}>{busy ? '…' : 'Kaydet'}</button>
         <button type="button" className="btn ghost" onClick={onDone}>Şimdi değil</button>
       </form>
+    </div>
+  );
+}
+
+/** Yasaklı hesap ekranı. */
+function Banned({ until, reason, onOut }: { until: string; reason: string | null; onOut: () => void }) {
+  const d = new Date(until);
+  const forever = d.getFullYear() - new Date().getFullYear() > 5;
+  return (
+    <div className="splash banned">
+      <div className="brand-mark">🚫</div>
+      <h2>Hesabın askıya alındı</h2>
+      <p>{forever ? 'Bu hesap kalıcı olarak kapatıldı.' : `Bitiş: ${d.toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}`}</p>
+      {reason && <p className="ban-reason">Sebep: {reason}</p>}
+      <button className="btn white" onClick={onOut}>Çıkış yap</button>
     </div>
   );
 }

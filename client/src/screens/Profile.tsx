@@ -6,7 +6,7 @@ import { AvatarPicker } from '../components/AvatarPicker';
 import { WalletPill } from './Home';
 
 export default function ProfileScreen() {
-  const { me, wallet, refreshMe, setWallet, toast, signOut, config } = useApp();
+  const { me, wallet, refreshMe, setWallet, toast, signOut, config, isAdmin, openAdmin } = useApp();
   let loginName = '';
   try { loginName = localStorage.getItem('parti.login') ?? me.username; } catch { loginName = me.username; }
   const [editing, setEditing] = useState(false);
@@ -75,6 +75,7 @@ export default function ProfileScreen() {
         </div>
       ) : (
         <div className="menu">
+          {isAdmin && <button className="menu-admin" onClick={openAdmin}>🛠️ Yönetim Paneli<span>›</span></button>}
           <button onClick={() => setEditing(true)}>✏️ Profili düzenle<span>›</span></button>
           <button onClick={() => toast('Mağaza yakında: elmas paketleri (Google Play / App Store ödemesi)')}>🛍️ Elmas mağazası<span>›</span></button>
           <button onClick={signOut}>🚪 Çıkış yap<span>›</span></button>

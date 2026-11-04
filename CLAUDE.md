@@ -14,6 +14,9 @@ WePlay/TopTop tarzı sesli oda + mini oyun uygulaması. Arayüz dili **Türkçe*
   - `functions/register`: kullanıcı adı + şifreyle kayıt (e-posta `u<hex>@parti.local`, istemcideki `loginEmail` ile aynı olmalı).
   - Giriş yöntemleri: kullanıcı adı (register fonksiyonu), e-posta + şifre, Google, Apple (Supabase Auth; `net.ts` içinde `oauthLogin`/`emailLogin`/`emailRegister`). Kullanıcı adı seçmeden gelen hesaplarda `profiles.onboarded = false` → istemci `Onboarding` ekranını gösterir, `complete_onboarding` RPC'si tamamlar.
   - Avatarlar: `client/src/components/Avatar.tsx` içindeki SVG karakterler; `profiles.avatar`'da kısa anahtar (`a01`…`a18`) ya da eski emoji saklanır.
+  - Yönetim paneli (`client/src/screens/Admin.tsx`): tüm işlemler `admin_*` RPC'leri (0007), her biri `_is_admin()` kontrol eder ve `admin_log`'a yazar. Yönetici = `admin_emails` içindeki DOĞRULANMIŞ e-posta ya da `profiles.is_admin`. Yasaklı hesap: `profiles.banned_until` (join_room / send_chat / create_room reddeder).
+  - Ayarlar `app_settings` (theme / announcement / games; herkes okur, Realtime ile anında yayılır, yazma yalnızca `admin_set_setting`).
+  - Temalar `client/src/themes.ts` (+ `styles.css` içinde `html.theme-<id>` renkleri, `components/ThemeFx.tsx` süsleri). Yeni tema = THEMES'e kayıt + CSS bloğu; tarih mantığı `themes.test.ts` ile test edilir.
   - `functions/voice`: LiveKit jetonu (secret'lar: LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET).
 
 ## Güvenlik kuralları (bozma)

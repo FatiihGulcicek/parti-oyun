@@ -56,7 +56,11 @@ async function profiles(ids: string[], force = false): Promise<Map<string, Profi
 
 async function rpc(fn: string, args?: Record<string, unknown>): Promise<any> {
   const { data, error } = await sb.rpc(fn, args);
-  if (error) { console.error(fn, error); return err(/JWT|auth/i.test(error.message) ? 'Oturum süresi doldu, tekrar giriş yap' : 'Sunucu hatası'); }
+  if (error) {
+    console.error(fn, error);
+    if (/forbidden/i.test(error.message)) return err('Bu işlem için yetkin yok');
+    return err(/JWT|auth/i.test(error.message) ? 'Oturum süresi doldu, tekrar giriş yap' : 'Sunucu hatası');
+  }
   return data;
 }
 
@@ -147,6 +151,12 @@ export const clearPasswordRecovery = () => { recovering = false; };
 
 let globalChannel: RealtimeChannel | null = null;
 
+/** Uygulama ayarları: { theme, announcement, games } */
+export async function loadSettings(): Promise<Record<string, any>> {
+  const { data } = await sb.from('app_settings').select('key,value');
+  return Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value]));
+}
+
 /** Giriş sonrası: kullanıcıyı belirle, arkadaşlık bildirimlerini dinle. */
 export async function connect(_token?: string) {
   const { data } = await sb.auth.getUser();
@@ -163,6 +173,10 @@ export async function connect(_token?: string) {
       if (f.addressee !== uid) return;
       const p = (await profiles([f.requester])).get(f.requester);
       bus.emit('friends:changed', { from: p, status: f.status });
+    })
+    // yönetim ayarları (tema, duyuru, kapalı oyunlar) anında herkese yansır
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, async () => {
+      bus.emit('settings:changed', await loadSettings());
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships' }, async ({ new: f }: any) => {
       if (f.status !== 'accepted' || f.requester !== uid) return;
@@ -309,7 +323,7 @@ async function joinRoom(id: string) {
     if (h && h.ok === false && cur === ctx) {
       const j = await rpc('join_room', { p_room: id });
       if (cur !== ctx) return;
-      if (j?.kicked) { bus.emit('room:kicked', j.error); return; }
+      if (j?.kicked || j?.banned) { bus.emit('room:kicked', j.error); return; }
       scheduleRebuild(ctx);
     }
   }, 20_000);
@@ -403,6 +417,23 @@ async function handle(event: string, p: any): Promise<any> {
       const { data } = await sb.from('profiles').select('id,username,avatar,level,bio,charm,wealth').eq('id', p.id).maybeSingle();
       return data ? { ok: true, profile: data, blocked: blocked.has(data.id) } : err('Profil bulunamadı');
     }
+    case 'status:get': {
+      const r = await rpc('my_status');
+      return r && !r.error ? { ok: true, admin: Boolean(r.admin), bannedUntil: r.banned_until, banReason: r.ban_reason } : err('Durum alınamadı');
+    }
+    case 'settings:get': return { ok: true, settings: await loadSettings() };
+    // ---- yönetim paneli (sunucuda _is_admin() ile korunur)
+    case 'admin:stats': { const r = await rpc('admin_stats'); return r?.error ? r : { ok: true, stats: r }; }
+    case 'admin:users': { const r = await rpc('admin_users', { p_q: p.q ?? '', p_filter: p.filter ?? 'all' }); return Array.isArray(r) ? { ok: true, users: r } : r; }
+    case 'admin:grant': return rpc('admin_grant', { p_user: p.id, p_diamonds: Math.trunc(Number(p.diamonds) || 0), p_coins: Math.trunc(Number(p.coins) || 0) });
+    case 'admin:ban': return rpc('admin_ban', { p_user: p.id, p_minutes: Math.trunc(Number(p.minutes) || 0), p_reason: p.reason ?? '' });
+    case 'admin:rooms': { const r = await rpc('admin_rooms'); return Array.isArray(r) ? { ok: true, rooms: r } : r; }
+    case 'admin:closeRoom': return rpc('admin_close_room', { p_room: p.id });
+    case 'admin:createRoom': return rpc('admin_create_room', { p_name: p.name, p_game: p.game, p_topic: p.topic ?? '' });
+    case 'admin:reports': { const r = await rpc('admin_reports', { p_status: p.status ?? 'open' }); return Array.isArray(r) ? { ok: true, reports: r } : r; }
+    case 'admin:resolve': return rpc('admin_resolve_report', { p_id: p.id, p_status: p.status });
+    case 'admin:setSetting': return rpc('admin_set_setting', { p_key: p.key, p_value: p.value });
+    case 'admin:log': { const r = await rpc('admin_log_list'); return Array.isArray(r) ? { ok: true, log: r } : r; }
     case 'profile:onboard': {
       const r = await rpc('complete_onboarding', { p_username: String(p.username ?? '').trim(), p_avatar: p.avatar });
       if (r?.ok) await profiles([uid], true);

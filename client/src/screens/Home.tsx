@@ -5,6 +5,7 @@ import { IconPlus } from '../components/Icons';
 import Avatar from '../components/Avatar';
 import { ChatArt, DrawArt, LudoArt, OkeyArt, SpyArt, TavlaArt, UnoArt } from '../components/HeroArt';
 import { GAMES, PLAYABLE, meta, type GameId } from '../games';
+import { TrFlag } from '../components/ThemeFx';
 import { CoinIcon, GemIcon, LevelBadge, greeting } from '../components/Currency';
 
 interface RoomSummary {
@@ -52,11 +53,26 @@ export function WalletPill() {
 }
 
 function HeroCarousel({ onPlay }: { onPlay: (g: GameId) => void }) {
+  const { theme } = useApp();
   const [i, setI] = useState(0);
-  useEffect(() => { const t = setInterval(() => setI(x => (x + 1) % SLIDES.length), 4500); return () => clearInterval(t); }, []);
+  const special = theme.id !== 'default';
+  const count = SLIDES.length + (special ? 1 : 0);
+  useEffect(() => { setI(0); }, [theme.id]);
+  useEffect(() => { const t = setInterval(() => setI(x => (x + 1) % count), 4500); return () => clearInterval(t); }, [count]);
   return (
     <div className="hero">
       <div className="hero-track" style={{ transform: `translateX(-${i * 100}%)` }}>
+        {special && (
+          <div className="hero-slide tone-theme">
+            <div className="hero-copy">
+              <h2>{theme.banner.title}</h2>
+              <p>{theme.banner.text}</p>
+              <button className="btn white small" onClick={() => onPlay('chat')}>Kutlamaya katıl ›</button>
+            </div>
+            <div className="hero-art theme-art">{theme.fx.includes('flag') ? <TrFlag size={70} /> : <span>{theme.emoji}</span>}</div>
+            <i className="hero-blob b1" /><i className="hero-blob b2" />
+          </div>
+        )}
         {SLIDES.map(s => (
           <div key={s.game} className={`hero-slide ${s.tone}`}>
             <div className="hero-copy">
@@ -69,13 +85,15 @@ function HeroCarousel({ onPlay }: { onPlay: (g: GameId) => void }) {
           </div>
         ))}
       </div>
-      <div className="hero-dots">{SLIDES.map((s, k) => <button key={s.game} className={k === i ? 'on' : ''} onClick={() => setI(k)} aria-label={`${k + 1}. tanıtım`} />)}</div>
+      <div className="hero-dots">{Array.from({ length: count }, (_, k) => <button key={k} className={k === i ? 'on' : ''} onClick={() => setI(k)} aria-label={`${k + 1}. tanıtım`} />)}</div>
     </div>
   );
 }
 
 export default function Home() {
-  const { me, openRoom, toast } = useApp();
+  const { me, openRoom, toast, settings, theme } = useApp();
+  const disabled: string[] = settings.games?.disabled ?? [];
+  const ann = settings.announcement;
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
   const [filter, setFilter] = useState<'all' | GameId>('all');
   const [creating, setCreating] = useState<null | GameId>(null);
@@ -88,6 +106,7 @@ export default function Home() {
   useEffect(() => { load(); const t = setInterval(load, 4000); return () => clearInterval(t); }, []);
 
   async function quickPlay(game: GameId) {
+    if (disabled.includes(game)) return toast(`${GAME_NAME(game)} şu an kapalı`);
     const pick = rooms?.filter(r => r.game === game && !r.playing && r.seated < 9).sort((a, b) => b.online - a.online)[0];
     if (pick) openRoom(pick.id); else { setName(`${me.username} odası`); setCreating(game); }
   }
@@ -108,13 +127,14 @@ export default function Home() {
         <div className="me-chip">
           <span className="me-av"><span className="av"><Avatar value={me.avatar} /></span><LevelBadge level={me.level} /></span>
           <div>
-            <small className="hello">{greeting()} <span className="wave">👋</span></small>
+            <small className="hello">{theme.greeting ?? greeting()} <span className="wave">{theme.id === 'default' ? '👋' : theme.emoji}</span></small>
             <b>{me.username}</b>
           </div>
         </div>
         <WalletPill />
       </header>
 
+      {ann?.active && ann.text && <div className="announce"><span>📢</span><p>{ann.text}</p></div>}
       <HeroCarousel onPlay={quickPlay} />
 
       <div className="section-head"><h3>Oyunlar</h3><small>{(rooms ?? []).reduce((n, r) => n + Number(r.online), 0)} kişi çevrimiçi</small></div>
@@ -122,11 +142,11 @@ export default function Home() {
         {PLAYABLE.map(g => {
           const m = GAMES[g];
           return (
-            <button key={g} className={`game-card gc-${g}`} onClick={() => quickPlay(g)}>
+            <button key={g} className={`game-card gc-${g} ${disabled.includes(g) ? 'soon' : ''}`} onClick={() => quickPlay(g)}>
               <div className={`gc-art ${g === 'uno' ? 'uno-art-wrap' : ''}`}><GameArt g={g} /></div>
               <div className="gc-copy"><b>{m.name}</b><small>{m.min === m.max ? `${m.max} oyuncu` : `${m.min}-${m.max} oyuncu`}</small></div>
               <span className="gc-live"><i />{online(g)}</span>
-              {m.isNew && <em className="gc-new">YENİ</em>}
+              {disabled.includes(g) ? <em className="gc-new off">KAPALI</em> : m.isNew && <em className="gc-new">YENİ</em>}
               <span className="gc-play">Oyna</span>
             </button>
           );
