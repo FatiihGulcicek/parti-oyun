@@ -166,14 +166,18 @@ h1, h2, h3, .display { font-family: var(--display); line-height: 1.1; }
 .me-av { position: relative; flex: none; }
 .me-av .av { width: 46px; height: 46px; padding: 2.5px; background: var(--grad); box-shadow: 0 4px 12px rgba(160,60,255,.3); }
 .me-av .av .avatar-svg, .me-av .av .avatar-emoji { border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #fff; }
-.me-lv { position: absolute; right: -6px; bottom: -3px; min-width: 21px; height: 18px; padding: 0 4px; border-radius: 9px; display: grid; place-items: center;
-  font-style: normal; font-size: 10px; font-weight: 900; color: #5a2a00; background: var(--grad-warm); border: 2px solid #fff; }
+.lvl-badge { position: absolute; right: -7px; bottom: -6px; width: 22px; height: 24px; display: grid; place-items: center; filter: drop-shadow(0 2px 3px rgba(200,100,0,.35)); }
+.lvl-badge svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lvl-badge b { position: relative; font-size: 10px; font-weight: 900; color: #6a3000; margin-top: -2px; }
+.me-chip .hello { display: flex; align-items: center; gap: 3px; }
+.wave { display: inline-block; transform-origin: 70% 70%; animation: wave 2.4s ease-in-out infinite; }
+@keyframes wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(16deg); } 20%, 40% { transform: rotate(-8deg); } }
 .wallet-pill { display: flex; align-items: center; gap: 7px; flex: none; background: var(--surface); border-radius: 999px; padding: 4px 4px 4px 10px; box-shadow: var(--shadow); }
-.wp-item { display: flex; align-items: center; gap: 3px; font-weight: 900; font-size: 13px; }
-.wp-ic { font-style: normal; font-size: 14px; }
+.wp-item { display: flex; align-items: center; gap: 4px; font-weight: 900; font-size: 13px; font-variant-numeric: tabular-nums; }
+.cur-ic { flex: none; filter: drop-shadow(0 1px 1.5px rgba(60, 20, 120, .25)); }
 .wp-sep { width: 1px; height: 16px; background: var(--line); }
-.wp-add { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; font-weight: 900; line-height: 1;
-  background: var(--grad-warm); color: #5a2a00; box-shadow: 0 3px 8px rgba(255,150,40,.4); }
+.wp-add { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: radial-gradient(circle at 35% 30%, #ffe27a, #ff9a1f 60%, #f07800); box-shadow: inset 0 -2px 0 rgba(160,70,0,.35), 0 3px 8px rgba(255,150,40,.45); }
 .wp-add:active { transform: scale(.88); }
 .room .wallet-pill { background: rgba(0,0,0,.3); box-shadow: none; }
 
@@ -183,8 +187,8 @@ h1, h2, h3, .display { font-family: var(--display); line-height: 1.1; }
 .hero-copy { position: relative; z-index: 2; max-width: 62%; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .hero-copy h2 { font-size: 22px; font-weight: 800; text-shadow: 0 2px 0 rgba(0,0,0,.12); }
 .hero-copy p { font-size: 13px; font-weight: 700; opacity: .95; margin-bottom: 4px; }
-.hero-art { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 1; width: 120px; height: 120px; display: grid; place-items: center; }
-.hero-art span { font-size: 84px; filter: drop-shadow(0 10px 14px rgba(0,0,0,.25)); animation: float 3.2s ease-in-out infinite; }
+.hero-art { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); z-index: 1; width: 140px; height: 130px; }
+.hero-svg { width: 100%; height: 100%; overflow: visible; animation: float 3.4s ease-in-out infinite; filter: drop-shadow(0 8px 12px rgba(0,0,0,.18)); }
 .hero-blob { position: absolute; border-radius: 50%; background: rgba(255,255,255,.18); }
 .hero-blob.b1 { width: 170px; height: 170px; right: -40px; top: -50px; }
 .hero-blob.b2 { width: 90px; height: 90px; right: 110px; bottom: -40px; background: rgba(255,255,255,.12); }

@@ -3,6 +3,8 @@ import { useApp } from '../App';
 import { call } from '../net';
 import { IconPlus } from '../components/Icons';
 import Avatar from '../components/Avatar';
+import { ChatArt, LudoArt, UnoArt } from '../components/HeroArt';
+import { CoinIcon, GemIcon, LevelBadge, greeting } from '../components/Currency';
 
 type GameId = 'uno' | 'chat' | 'ludo';
 interface RoomSummary {
@@ -13,10 +15,10 @@ interface RoomSummary {
 const GAME_ICON: Record<GameId, string> = { uno: '🎴', chat: '🎙️', ludo: '🎲' };
 const GAME_NAME: Record<GameId, string> = { uno: 'Uno', chat: 'Sohbet', ludo: 'Ludo' };
 
-const SLIDES: { game: GameId; title: string; text: string; cta: string; art: string; tone: string }[] = [
-  { game: 'ludo', title: 'Ludo masası kuruldu!', text: 'Zarı at, rakibini kır, eve ilk sen var.', cta: 'Hemen oyna', art: '🎲', tone: 'tone-ludo' },
-  { game: 'uno', title: 'UNO demeyi unutma', text: '2-6 kişilik hızlı Uno masaları seni bekliyor.', cta: 'Masaya otur', art: '🎴', tone: 'tone-uno' },
-  { game: 'chat', title: 'Sesli sohbet odaları', text: 'Koltuğa otur, mikrofonu aç, yeni insanlarla tanış.', cta: 'Odaya gir', art: '🎙️', tone: 'tone-chat' },
+const SLIDES: { game: GameId; title: string; text: string; cta: string; tone: string }[] = [
+  { game: 'ludo', title: 'Ludo masası kuruldu!', text: 'Zarı at, rakibini kır, eve ilk sen var.', cta: 'Hemen oyna', tone: 'tone-ludo' },
+  { game: 'uno', title: 'UNO demeyi unutma', text: '2-6 kişilik hızlı Uno masaları seni bekliyor.', cta: 'Masaya otur', tone: 'tone-uno' },
+  { game: 'chat', title: 'Sesli sohbet odaları', text: 'Koltuğa otur, mikrofonu aç, yeni insanlarla tanış.', cta: 'Odaya gir', tone: 'tone-chat' },
 ];
 
 const compact = (n: number) => n >= 10_000 ? `${(n / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}B` : n.toLocaleString('tr-TR');
@@ -26,10 +28,12 @@ export function WalletPill() {
   const { wallet, toast } = useApp();
   return (
     <div className="wallet-pill">
-      <span className="wp-item"><i className="wp-ic dia">💎</i>{compact(wallet.diamonds)}</span>
+      <span className="wp-item" title="Elmas"><GemIcon size={19} />{compact(wallet.diamonds)}</span>
       <span className="wp-sep" />
-      <span className="wp-item"><i className="wp-ic coin">🪙</i>{compact(wallet.coins)}</span>
-      <button className="wp-add" aria-label="Elmas al" onClick={() => toast('Elmas mağazası yakında 💎')}>+</button>
+      <span className="wp-item" title="Altın"><CoinIcon size={19} />{compact(wallet.coins)}</span>
+      <button className="wp-add" aria-label="Elmas al" onClick={() => toast('Elmas mağazası yakında 💎')}>
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" /></svg>
+      </button>
     </div>
   );
 }
@@ -47,7 +51,7 @@ function HeroCarousel({ onPlay }: { onPlay: (g: GameId) => void }) {
               <p>{s.text}</p>
               <button className="btn white small" onClick={() => onPlay(s.game)}>{s.cta} ›</button>
             </div>
-            <div className="hero-art"><span>{s.art}</span></div>
+            <div className="hero-art">{s.game === 'ludo' ? <LudoArt /> : s.game === 'uno' ? <UnoArt /> : <ChatArt />}</div>
             <i className="hero-blob b1" /><i className="hero-blob b2" />
           </div>
         ))}
@@ -89,9 +93,9 @@ export default function Home() {
     <div className="home">
       <header className="app-header">
         <div className="me-chip">
-          <span className="me-av"><span className="av"><Avatar value={me.avatar} /></span><i className="me-lv">{me.level}</i></span>
+          <span className="me-av"><span className="av"><Avatar value={me.avatar} /></span><LevelBadge level={me.level} /></span>
           <div>
-            <small className="hello">Merhaba 👋</small>
+            <small className="hello">{greeting()} <span className="wave">👋</span></small>
             <b>{me.username}</b>
           </div>
         </div>
