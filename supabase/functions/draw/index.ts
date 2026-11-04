@@ -60,6 +60,9 @@ Deno.serve(async (req) => {
     const seated: string[] = (room.seats as (string | null)[]).filter((x): x is string => Boolean(x));
 
     if (body.action === 'start') {
+      // yönetim panelinden kapatılan oyun yeni el başlatamaz
+      const { data: gs } = await admin.from('app_settings').select('value').eq('key', 'games').maybeSingle();
+      if (((gs?.value as any)?.disabled ?? []).includes(room.game)) return fail('Bu oyun şu an yönetici tarafından kapatıldı');
       if (!seated.includes(uid)) return fail('Başlatmak için koltuğa otur');
       if (room.owner_id && room.owner_id !== uid) return fail('Oyunu oda sahibi başlatır');
       const { data: old } = await admin.from('games').select('state,version').eq('room_id', roomId).maybeSingle();

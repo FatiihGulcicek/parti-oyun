@@ -289,7 +289,12 @@ async function joinRoom(id: string) {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, () => scheduleRebuild(ctx))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_messages', filter: `room_id=eq.${id}` }, async ({ new: m }: any) => {
       if (cur !== ctx) return;
-      if (m.kind === 'system' && m.meta?.kicked === uid) { bus.emit('room:kicked', 'Oda sahibi seni odadan attı'); return; }
+      if (m.kind === 'system' && m.meta?.kicked === uid) { bus.emit('room:kicked', m.meta.by === 'admin' ? 'Yönetici seni odadan çıkardı' : 'Oda sahibi seni odadan attı'); return; }
+      // yönetici işlemleri: sohbet temizleme, mesaj silme, oyunu durdurma
+      if (m.kind === 'system' && m.meta?.cleared) bus.emit('chat:clear', null);
+      if (m.kind === 'system' && m.meta?.deleted) bus.emit('chat:delete', { id: m.meta.deleted });
+      if (m.kind === 'system' && m.meta?.deleted_user) bus.emit('chat:delete', { userId: m.meta.deleted_user });
+      if (m.kind === 'system' && m.meta?.game_stopped) { ctx.pub = null; ctx.hand = null; ctx.handVersion = -1; emitUno(ctx); }
       if (m.kind === 'chat' && blocked.has(m.user_id)) return;
       const msg = await toMsg(m);
       bus.emit('chat:msg', msg);
@@ -408,7 +413,7 @@ async function handle(event: string, p: any): Promise<any> {
       return r?.ok ? { ok: true, diamonds: r.diamonds } : err(r?.error ?? reason(r?.reason));
     }
     case 'gifts:list': {
-      const { data } = await sb.from('gifts').select('id,name,icon,price,tier').order('sort');
+      const { data } = await sb.from('gifts').select('id,name,icon,price,tier').eq('active', true).order('sort');
       return { ok: true, gifts: data ?? [] };
     }
     case 'daily:claim': {
@@ -421,12 +426,31 @@ async function handle(event: string, p: any): Promise<any> {
     }
     case 'status:get': {
       const r = await rpc('my_status');
-      return r && !r.error ? { ok: true, admin: Boolean(r.admin), bannedUntil: r.banned_until, banReason: r.ban_reason } : err('Durum alınamadı');
+      return r && !r.error ? { ok: true, admin: Boolean(r.admin), bannedUntil: r.banned_until, banReason: r.ban_reason, mutedUntil: r.muted_until ?? null } : err('Durum alınamadı');
     }
     case 'settings:get': return { ok: true, settings: await loadSettings() };
     // ---- yönetim paneli (sunucuda _is_admin() ile korunur)
     case 'admin:stats': { const r = await rpc('admin_stats'); return r?.error ? r : { ok: true, stats: r }; }
-    case 'admin:users': { const r = await rpc('admin_users', { p_q: p.q ?? '', p_filter: p.filter ?? 'all' }); return Array.isArray(r) ? { ok: true, users: r } : r; }
+    case 'admin:users': { const r = await rpc('admin_users', { p_q: p.q ?? '', p_filter: p.filter ?? 'all', p_offset: Math.max(0, Math.trunc(Number(p.offset) || 0)) }); return Array.isArray(r) ? { ok: true, users: r } : r; }
+    case 'admin:user': { const r = await rpc('admin_user_detail', { p_user: p.id }); return r?.profile ? { ok: true, detail: r } : err(r?.error ?? 'Kullanıcı bulunamadı'); }
+    case 'admin:editUser': return rpc('admin_update_user', { p_user: p.id, p_username: p.username ?? null, p_bio: p.bio ?? null, p_avatar: p.avatar ?? null, p_level: p.level == null ? null : Math.trunc(Number(p.level)) });
+    case 'admin:mute': return rpc('admin_mute', { p_user: p.id, p_minutes: Math.trunc(Number(p.minutes) || 0) });
+    case 'admin:setAdmin': return rpc('admin_set_admin', { p_user: p.id, p_on: Boolean(p.on) });
+    case 'admin:admins': { const r = await rpc('admin_list_admins'); return Array.isArray(r) ? { ok: true, admins: r } : r; }
+    case 'admin:kick': return rpc('admin_kick', { p_user: p.id, p_minutes: Math.trunc(Number(p.minutes) || 0) });
+    case 'admin:messages': { const r = await rpc('admin_messages', { p_q: p.q ?? '', p_room: p.room || null, p_user: p.user || null, p_before: p.before ?? null }); return Array.isArray(r) ? { ok: true, messages: r } : r; }
+    case 'admin:deleteMessage': return rpc('admin_delete_message', { p_id: p.id });
+    case 'admin:deleteUserMessages': return rpc('admin_delete_user_messages', { p_user: p.id });
+    case 'admin:room': { const r = await rpc('admin_room_detail', { p_room: p.id }); return r?.room ? { ok: true, detail: r } : err(r?.error ?? 'Oda bulunamadı'); }
+    case 'admin:editRoom': return rpc('admin_update_room', { p_room: p.id, p_name: p.name, p_topic: p.topic ?? '', p_game: p.game, p_permanent: Boolean(p.permanent) });
+    case 'admin:roomMessage': return rpc('admin_room_message', { p_room: p.id ?? '', p_text: p.text });
+    case 'admin:clearChat': return rpc('admin_clear_chat', { p_room: p.id });
+    case 'admin:stopGame': return rpc('admin_stop_game', { p_room: p.id });
+    case 'admin:freeSeat': return rpc('admin_free_seat', { p_room: p.id, p_seat: p.seat });
+    case 'admin:unbanRoom': return rpc('admin_unban_room', { p_room: p.id, p_user: p.user });
+    case 'admin:gifts': { const r = await rpc('admin_gifts'); return Array.isArray(r) ? { ok: true, gifts: r } : r; }
+    case 'admin:saveGift': return rpc('admin_save_gift', { p_id: p.id, p_name: p.name, p_icon: p.icon, p_price: Math.trunc(Number(p.price) || 0), p_tier: p.tier, p_sort: Math.trunc(Number(p.sort) || 0), p_active: p.active !== false });
+    case 'admin:getSetting': { const r = await rpc('admin_get_setting', { p_key: p.key }); return r?.ok === false ? r : { ok: true, value: r }; }
     case 'admin:grant': return rpc('admin_grant', { p_user: p.id, p_diamonds: Math.trunc(Number(p.diamonds) || 0), p_coins: Math.trunc(Number(p.coins) || 0) });
     case 'admin:ban': return rpc('admin_ban', { p_user: p.id, p_minutes: Math.trunc(Number(p.minutes) || 0), p_reason: p.reason ?? '' });
     case 'admin:rooms': { const r = await rpc('admin_rooms'); return Array.isArray(r) ? { ok: true, rooms: r } : r; }
@@ -435,7 +459,7 @@ async function handle(event: string, p: any): Promise<any> {
     case 'admin:reports': { const r = await rpc('admin_reports', { p_status: p.status ?? 'open' }); return Array.isArray(r) ? { ok: true, reports: r } : r; }
     case 'admin:resolve': return rpc('admin_resolve_report', { p_id: p.id, p_status: p.status });
     case 'admin:setSetting': return rpc('admin_set_setting', { p_key: p.key, p_value: p.value });
-    case 'admin:log': { const r = await rpc('admin_log_list'); return Array.isArray(r) ? { ok: true, log: r } : r; }
+    case 'admin:log': { const r = await rpc('admin_log_list', { p_action: p.action || null, p_before: p.before ?? null }); return Array.isArray(r) ? { ok: true, log: r } : r; }
     case 'profile:onboard': {
       const r = await rpc('complete_onboarding', { p_username: String(p.username ?? '').trim(), p_avatar: p.avatar });
       if (r?.ok) await profiles([uid], true);

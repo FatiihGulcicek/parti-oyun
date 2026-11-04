@@ -134,10 +134,12 @@ export default function App() {
 
   const ctx: Ctx = { config, me, wallet, refreshMe, setWallet, openRoom, toast, signOut, settings, theme, isAdmin: status.admin, openAdmin: () => setAdminOpen(true) };
   const banned = status.bannedUntil && Date.parse(status.bannedUntil) > Date.now();
+  const maintenance = Boolean(settings.maintenance?.active) && !status.admin;
   return (
     <AppCtx.Provider value={ctx}>
       <div className="app">
         {banned ? <Banned until={status.bannedUntil!} reason={status.banReason} onOut={signOut} />
+          : maintenance ? <Maintenance text={settings.maintenance?.text} onOut={signOut} />
           : adminOpen && status.admin ? <Admin onClose={() => setAdminOpen(false)} />
           : me.onboarded === false ? <Onboarding /> : roomId ? (
           <RoomScreen key={roomId} roomId={roomId} onExit={() => { setRoomId(null); if (history.state?.room) history.back(); }} />
@@ -186,6 +188,18 @@ function NewPassword({ onDone, toast }: { onDone: () => void; toast: (m: string)
         <button className="btn primary big" disabled={busy}>{busy ? '…' : 'Kaydet'}</button>
         <button type="button" className="btn ghost" onClick={onDone}>Şimdi değil</button>
       </form>
+    </div>
+  );
+}
+
+/** Bakım modu: yöneticiler dışında herkes bu ekranı görür (sunucu da oda girişini reddeder). */
+function Maintenance({ text, onOut }: { text?: string; onOut: () => void }) {
+  return (
+    <div className="splash banned maint">
+      <div className="brand-mark">🛠️</div>
+      <h2>Kısa bir bakımdayız</h2>
+      <p>{text?.trim() || 'Uygulamayı güzelleştiriyoruz, birazdan geri döneceğiz.'}</p>
+      <button className="btn white" onClick={onOut}>Çıkış yap</button>
     </div>
   );
 }

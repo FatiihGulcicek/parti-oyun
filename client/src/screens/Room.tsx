@@ -51,12 +51,16 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     const onGame = (v: any | null) => setGv(v);
     const onKicked = (why?: string) => { toast(why || 'Odadan atıldın'); onExit(); };
     const onBlock = (b: { id: string; blocked: boolean }) => { if (b.blocked) setChat(c => c.filter(m => !(m.kind === 'chat' && m.from?.id === b.id))); };
+    const onClear = () => setChat([]);
+    const onDel = (d: { id?: number; userId?: string }) => setChat(c => c.filter(m => !(d.id ? m.id === d.id : m.kind === 'chat' && m.from?.id === d.userId)));
+    bus.on('chat:clear', onClear); bus.on('chat:delete', onDel);
     bus.on('room:kicked', onKicked); bus.on('block:changed', onBlock);
     bus.on('room:state', onState); bus.on('chat:msg', onMsg); bus.on('uno:state', onUno); bus.on('game:state', onGame);
     join();
     const off = onVoice((sp, st) => { setSpeaking(new Set(sp)); setVstatus(st); });
     return () => {
       alive = false;
+      bus.off('chat:clear', onClear); bus.off('chat:delete', onDel);
       bus.off('room:kicked', onKicked); bus.off('block:changed', onBlock);
       bus.off('room:state', onState); bus.off('chat:msg', onMsg); bus.off('uno:state', onUno); bus.off('game:state', onGame);
       off(); leaveVoice(); call('room:leave');

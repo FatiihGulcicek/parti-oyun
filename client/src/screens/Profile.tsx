@@ -6,7 +6,8 @@ import { AvatarPicker } from '../components/AvatarPicker';
 import { WalletPill } from './Home';
 
 export default function ProfileScreen() {
-  const { me, wallet, refreshMe, setWallet, toast, signOut, config, isAdmin, openAdmin } = useApp();
+  const { me, wallet, refreshMe, setWallet, toast, signOut, config, isAdmin, openAdmin, settings } = useApp();
+  const daily = { d: Number(settings.economy?.daily_diamonds ?? 50), c: Number(settings.economy?.daily_coins ?? 200) };
   let loginName = '';
   try { loginName = localStorage.getItem('parti.login') ?? me.username; } catch { loginName = me.username; }
   const [editing, setEditing] = useState(false);
@@ -15,10 +16,10 @@ export default function ProfileScreen() {
   const [avatar, setAvatar] = useState(me.avatar);
 
   async function claim() {
-    const r = await call<{ diamonds: number; coins: number }>('daily:claim');
+    const r = await call<{ diamonds: number; coins: number; got_diamonds?: number; got_coins?: number }>('daily:claim');
     if (!r.ok) return toast(r.error!);
     setWallet({ diamonds: r.diamonds, coins: r.coins, canClaimDaily: false });
-    toast('🎁 +50 💎  +200 🪙');
+    toast(`🎁 +${r.got_diamonds ?? daily.d} 💎  +${r.got_coins ?? daily.c} 🪙`);
   }
 
   async function save() {
@@ -56,7 +57,7 @@ export default function ProfileScreen() {
 
       <div className="card daily">
         <span className="daily-ic">🎁</span>
-        <div><b>Günlük ödül</b><small>Her gün 50 💎 + 200 🪙</small></div>
+        <div><b>Günlük ödül</b><small>Her gün {daily.d} 💎 + {daily.c} 🪙</small></div>
         <button className="btn gold" disabled={!wallet.canClaimDaily} onClick={claim}>{wallet.canClaimDaily ? 'Topla' : 'Alındı ✓'}</button>
       </div>
 
