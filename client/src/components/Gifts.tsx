@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../App';
-import { call, getSocket, Profile } from '../net';
+import { bus, call, Profile } from '../net';
 
 interface Gift { id: string; name: string; icon: string; price: number; tier: 'small' | 'medium' | 'large' }
 export interface GiftFxEvent { from: Profile; to: Profile; icon: string; name: string; tier: string; qty: number; total: number }
@@ -72,16 +72,16 @@ export function GiftFx() {
   const seq = useRef(0);
 
   useEffect(() => {
-    const s = getSocket();
     const on = (e: GiftFxEvent) => {
+      if (!e?.from || !e?.to) return;
       const item = { ...e, key: seq.current++ };
       if (e.tier === 'small') {
         setFloaters(f => [...f, item]);
         setTimeout(() => setFloaters(f => f.filter(x => x.key !== item.key)), 2200);
       } else setQueue(q => [...q, item]);
     };
-    s?.on('gift:fx', on);
-    return () => { s?.off('gift:fx', on); };
+    bus.on('gift:fx', on);
+    return () => { bus.off('gift:fx', on); };
   }, []);
 
   const cur = queue[0];

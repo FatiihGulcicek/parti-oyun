@@ -6,6 +6,8 @@ import { WalletPill } from './Home';
 
 export default function ProfileScreen() {
   const { me, wallet, refreshMe, setWallet, toast, signOut, config } = useApp();
+  let loginName = '';
+  try { loginName = localStorage.getItem('parti.login') ?? me.username; } catch { loginName = me.username; }
   const [editing, setEditing] = useState(false);
   const [username, setUsername] = useState(me.username);
   const [bio, setBio] = useState(me.bio);
@@ -69,7 +71,7 @@ export default function ProfileScreen() {
           <button onClick={signOut}>🚪 Çıkış yap<span>›</span></button>
         </div>
       )}
-      <p className="hint center">{config.mode === 'demo' ? 'Demo modu · veriler sunucu yeniden başlayınca sıfırlanır' : 'Hesabın Supabase üzerinde güvende'}</p>
+      <p className="hint center">Giriş adın: <b>{loginName}</b> · v{config.mode === 'supabase' ? '1.0' : ''}</p>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { call, connect, loadConfig, logout, restoreSession, watchTokenRefresh, FullProfile, ServerConfig, Wallet } from './net';
+import { bus, call, connect, loadConfig, logout, restoreSession, FullProfile, ServerConfig, Wallet } from './net';
 import Login from './screens/Login';
 import Home from './screens/Home';
 import Friends from './screens/Friends';
@@ -45,14 +45,13 @@ export default function App() {
 
   const start = useCallback(async (token: string) => {
     try {
-      const s = await connect(token);
-      s.on('disconnect', (reason) => { if (reason !== 'io client disconnect') toast('Bağlantı koptu, yeniden bağlanılıyor…'); });
-      s.on('friends:changed', (p: any) => {
+      await connect(token);
+      bus.on('friends:changed', (p: any) => {
+        if (!p?.from) return;
         if (p.status === 'pending') { setFriendBadge(n => n + 1); toast(`${p.from.avatar} ${p.from.username} arkadaşlık isteği gönderdi`); }
         if (p.status === 'accepted') toast(`${p.from.avatar} ${p.from.username} artık arkadaşın!`);
       });
       await refreshMe();
-      watchTokenRefresh();
       setPhase('ready');
     } catch {
       await logout();

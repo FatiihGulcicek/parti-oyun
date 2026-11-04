@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDeck, newGame, apply, canPlay, viewFor, autoMove, removePlayer, UnoState, Card, current } from './uno';
+import { buildDeck, newGame, apply, canPlay, viewFor, autoMove, removePlayer, UnoState, Card, current } from './uno.ts';
 
 function seeded(seed = 42) {
   return () => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed / 2 ** 31; };

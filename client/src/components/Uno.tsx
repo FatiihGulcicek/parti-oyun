@@ -7,7 +7,7 @@ export interface Card { id: number; color: Color | 'wild'; value: string }
 export interface UnoView {
   players: { id: string; count: number; saidUno: boolean }[];
   myHand: Card[] | null; top: Card; color: Color; turn: string; direction: 1 | -1; deckCount: number;
-  drewThisTurn: boolean; unoVulnerable: string | null; winner: string | null;
+  drewThisTurn: boolean; unoVulnerable: string | null; winner: string | null; syncing?: boolean;
   lastAction: { type: string; by: string; card?: Card; target?: string; count?: number } | null;
   deadline: number; serverNow: number;
 }
@@ -47,7 +47,7 @@ export default function UnoTable({ view, people }: { view: UnoView; people: Map<
   const [wildFor, setWildFor] = useState<Card | null>(null);
   const [busy, setBusy] = useState(false);
   const left = useCountdown(view);
-  const myTurn = view.turn === me.id && !view.winner;
+  const myTurn = view.turn === me.id && !view.winner && !view.syncing;
   const hand = view.myHand;
   const playing = Boolean(hand);
 

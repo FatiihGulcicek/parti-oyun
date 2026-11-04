@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../App';
-import { call, getSocket, Profile } from '../net';
+import { bus, call, Profile } from '../net';
 import { joinVoice, leaveVoice, onVoice, setMic, unlockAudio, VoiceStatus } from '../voice';
 import UnoTable, { UnoView } from '../components/Uno';
 import { GiftFx, GiftSheet } from '../components/Gifts';
@@ -31,26 +31,23 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
 
   // ---- bağlan / katıl
   useEffect(() => {
-    const s = getSocket();
-    if (!s) return;
     let alive = true;
     const join = async () => {
       const r = await call<{ room: RoomState; chat: ChatMsg[] }>('room:join', { roomId });
       if (!alive) return;
       if (!r.ok) { toast(r.error!); onExit(); return; }
-      setRoom(r.room); setChat(r.chat);
+      if (r.room) setRoom(r.room); setChat(r.chat);
       joinVoice();
     };
     const onState = (x: RoomState) => setRoom(x);
     const onMsg = (m: ChatMsg) => setChat(c => [...c.slice(-80), m]);
     const onUno = (v: UnoView | null) => setUno(v);
-    s.on('room:state', onState); s.on('chat:msg', onMsg); s.on('uno:state', onUno);
-    s.on('connect', join); // yeniden bağlanınca odaya tekrar gir
+    bus.on('room:state', onState); bus.on('chat:msg', onMsg); bus.on('uno:state', onUno);
     join();
     const off = onVoice((sp, st) => { setSpeaking(new Set(sp)); setVstatus(st); });
     return () => {
       alive = false;
-      s.off('room:state', onState); s.off('chat:msg', onMsg); s.off('uno:state', onUno); s.off('connect', join);
+      bus.off('room:state', onState); bus.off('chat:msg', onMsg); bus.off('uno:state', onUno);
       off(); leaveVoice(); call('room:leave');
     };
   }, [roomId]);
