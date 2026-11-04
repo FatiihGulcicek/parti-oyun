@@ -7,6 +7,7 @@ import ProfileScreen from './screens/Profile';
 import RoomScreen from './screens/Room';
 import { IconHome, IconUser, IconUsers } from './components/Icons';
 import './styles.css';
+import { avatarText } from './components/Avatar';
 
 interface Ctx {
   config: ServerConfig;
@@ -49,8 +50,8 @@ export default function App() {
       await connect(token);
       bus.on('friends:changed', (p: any) => {
         if (!p?.from) return;
-        if (p.status === 'pending') { setFriendBadge(n => n + 1); toast(`${p.from.avatar} ${p.from.username} arkadaşlık isteği gönderdi`); }
-        if (p.status === 'accepted') toast(`${p.from.avatar} ${p.from.username} artık arkadaşın!`);
+        if (p.status === 'pending') { setFriendBadge(n => n + 1); toast(`${avatarText(p.from.avatar)} ${p.from.username} arkadaşlık isteği gönderdi`); }
+        if (p.status === 'accepted') toast(`${avatarText(p.from.avatar)} ${p.from.username} artık arkadaşın!`);
       });
       await refreshMe();
       setPhase('ready');

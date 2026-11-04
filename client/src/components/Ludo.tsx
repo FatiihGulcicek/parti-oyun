@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { call, Profile } from '../net';
 import { useApp } from '../App';
+import Avatar from './Avatar';
 
 export type LudoColor = 'red' | 'green' | 'yellow' | 'blue';
 export interface LudoView {
@@ -232,7 +233,7 @@ export default function LudoTable({ view, people }: { view: LudoView; people: Ma
     return (
       <div className={`ludo-badge ${isTurn ? 'turn' : ''}`} style={{ ['--pc' as any]: HEX[c] }}>
         <div className="opp-av" style={isTurn ? { ['--pct' as any]: `${(left / TURN_MS) * 100}%` } : undefined}>
-          <span>{people.get(p.id)?.avatar ?? '❔'}</span>
+          <span><Avatar value={people.get(p.id)?.avatar} /></span>
         </div>
         <div className="lb-txt">
           <b>{p.id === me.id ? 'Sen' : name(p.id)}</b>
@@ -313,7 +314,7 @@ export default function LudoTable({ view, people }: { view: LudoView; people: Ma
         <div className="win-overlay">
           <div className="confetti">{Array.from({ length: 24 }, (_, i) => <i key={i} style={{ ['--i' as any]: i }} />)}</div>
           <div className="win-card">
-            <div className="av-xl">{people.get(view.winner)?.avatar}</div>
+            <div className="av-xl"><Avatar value={people.get(view.winner)?.avatar} /></div>
             <h2>{name(view.winner)}</h2>
             <p>{view.winner === me.id ? 'Tebrikler, kazandın! 🎉' : 'Ludo şampiyonu! 🏆'}</p>
           </div>

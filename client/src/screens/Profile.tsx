@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../App';
 import { call } from '../net';
-import { AVATARS } from './Login';
+import Avatar from '../components/Avatar';
+import { AvatarPicker } from '../components/AvatarPicker';
 import { WalletPill } from './Home';
 
 export default function ProfileScreen() {
@@ -37,7 +38,7 @@ export default function ProfileScreen() {
         <header className="topbar"><h2>Profilim</h2><WalletPill /></header>
       </div>
       <div className="profile-hero">
-        <div className="av-xl">{me.avatar}</div>
+        <div className="av-xl"><Avatar value={me.avatar} /></div>
         <h2>{me.username} <span className="lv">Lv.{me.level}</span></h2>
         <p className="bio">{me.bio || 'Henüz bir şey yazmadın.'}</p>
         <div className="stats">
@@ -61,8 +62,8 @@ export default function ProfileScreen() {
 
       {editing ? (
         <div className="card edit">
-          <label>Avatar</label>
-          <div className="avatar-grid">{AVATARS.map(a => <button key={a} className={a === avatar ? 'on' : ''} onClick={() => setAvatar(a)}>{a}</button>)}</div>
+          <label>Karakter</label>
+          <AvatarPicker value={avatar} onChange={setAvatar} />
           <label>Kullanıcı adı</label>
           <input value={username} onChange={e => setUsername(e.target.value)} maxLength={20} />
           <label>Hakkımda</label>

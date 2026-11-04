@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../App';
 import { bus, call, Profile } from '../net';
+import Avatar from './Avatar';
 
 interface Gift { id: string; name: string; icon: string; price: number; tier: 'small' | 'medium' | 'large' }
 export interface GiftFxEvent { from: Profile; to: Profile; icon: string; name: string; tier: string; qty: number; total: number }
@@ -42,7 +43,7 @@ export function GiftSheet({ members, initialTo, roomOwner, onClose }: {
           {others.length === 0 && <small className="muted">Odada başka kimse yok</small>}
           {others.map(m => (
             <button key={m.id} className={to === m.id ? 'on' : ''} onClick={() => setTo(m.id)}>
-              <span className="av">{m.avatar}</span><small>{m.username}</small>
+              <span className="av"><Avatar value={m.avatar} /></span><small>{m.username}</small>
             </button>
           ))}
         </div>
@@ -96,7 +97,7 @@ export function GiftFx() {
       <div className="gift-floaters">
         {floaters.map((f, i) => (
           <div key={f.key} className="gift-floater" style={{ ['--row' as any]: i % 3 }}>
-            <span className="av">{f.from.avatar}</span>
+            <span className="av"><Avatar value={f.from.avatar} /></span>
             <div><b>{f.from.username}</b><small>→ {f.to.username}</small></div>
             <span className="gicon">{f.icon}</span><em>×{f.qty}</em>
           </div>
@@ -107,7 +108,7 @@ export function GiftFx() {
           <div className="rays" />
           <div className="big-icon">{cur.icon}</div>
           <div className="big-text">
-            <b>{cur.from.avatar} {cur.from.username}</b> → <b>{cur.to.avatar} {cur.to.username}</b>
+            <b><Avatar value={cur.from.avatar} className="inline" /> {cur.from.username}</b> → <b><Avatar value={cur.to.avatar} className="inline" /> {cur.to.username}</b>
             <div>{cur.name} ×{cur.qty}</div>
           </div>
           {cur.tier === 'large' && <div className="sparkles">{Array.from({ length: 18 }, (_, i) => <i key={i} style={{ ['--i' as any]: i }}>✨</i>)}</div>}

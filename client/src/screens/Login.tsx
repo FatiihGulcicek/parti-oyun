@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { login, register, ServerConfig } from '../net';
 
-export const AVATARS = ['😀', '😎', '🥳', '🤠', '🐱', '🐶', '🦊', '🐼', '🐸', '🦁', '🐯', '🐵', '🦄', '🐙', '👽', '🤖', '👻', '🎃', '🌸', '⭐'];
+import { AvatarPicker } from '../components/AvatarPicker';
+import { randomAvatar } from '../components/Avatar';
 
 export default function Login({ onToken }: { config?: ServerConfig; onToken: (t: string) => Promise<void> }) {
   const [kind, setKind] = useState<'login' | 'register'>('register');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [avatar, setAvatar] = useState(AVATARS[Math.floor(Math.random() * AVATARS.length)]);
+  const [avatar, setAvatar] = useState(randomAvatar);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -43,10 +44,8 @@ export default function Login({ onToken }: { config?: ServerConfig; onToken: (t:
         </div>
         {kind === 'register' && (
           <>
-            <label>Avatarını seç</label>
-            <div className="avatar-grid">
-              {AVATARS.map(a => <button type="button" key={a} className={a === avatar ? 'on' : ''} onClick={() => setAvatar(a)}>{a}</button>)}
-            </div>
+            <label>Karakterini seç</label>
+            <AvatarPicker value={avatar} onChange={setAvatar} />
           </>
         )}
         <input placeholder="Kullanıcı adı" value={username} onChange={e => setUsername(e.target.value)} maxLength={20}

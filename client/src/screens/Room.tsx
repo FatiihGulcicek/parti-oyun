@@ -7,6 +7,7 @@ import LudoTable, { LudoView } from '../components/Ludo';
 import { GiftFx, GiftSheet } from '../components/Gifts';
 import UserCard from '../components/UserCard';
 import { IconBack, IconGift, IconLock, IconMic, IconMicOff, IconSeatDown, IconSend, IconSofa } from '../components/Icons';
+import Avatar from '../components/Avatar';
 
 interface SeatView { userId?: string; muted?: boolean; profile?: Profile | null; locked: boolean }
 interface RoomState {
@@ -113,7 +114,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     return (
       <button className={`seat ${i === 0 ? 'host' : ''} ${talking ? 'talking' : ''} ${p ? 'filled' : ''}`} onClick={() => seatTap(i)}>
         <div className="seat-av">
-          {p ? <span>{p.avatar}</span> : s.locked ? <span className="lock"><IconLock size={20} /></span> : <span className="plus"><IconSofa size={24} /></span>}
+          {p ? <span className="seat-face"><Avatar value={p.avatar} /></span> : s.locked ? <span className="lock"><IconLock size={20} /></span> : <span className="plus"><IconSofa size={24} /></span>}
           {p && s.muted && <i className="muted-ic"><IconMicOff size={11} /></i>}
           {p && room.ownerId === p.id && <i className="crown-ic">👑</i>}
           {inGame && <i className="game-ic">{room.game === 'ludo' ? '🎲' : '🎴'}</i>}
@@ -135,7 +136,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
           </div>
         </div>
         <button className="online-btn" onClick={() => setShowMembers(true)}>
-          <span className="stack">{room.members.slice(0, 3).map(m => <i key={m.id}>{m.avatar}</i>)}</span>{room.online}
+          <span className="stack">{room.members.slice(0, 3).map(m => <i key={m.id}><Avatar value={m.avatar} /></i>)}</span>{room.online}
         </button>
       </header>
 
@@ -167,7 +168,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
         <div className="chat-note">🛡️ Saygılı ol. Hakaret ve spam yasaktır.</div>
         {chat.map(m => (
           <div key={m.id} className={`msg k-${m.kind}`}>
-            {m.from && <b onClick={() => setCard(m.from!.id)}><i className="lvc">Lv.{m.from.level}</i>{m.from.avatar} {m.from.username}{m.kind === 'chat' ? ':' : ''}</b>} {m.text}
+            {m.from && <b onClick={() => setCard(m.from!.id)}><i className="lvc">Lv.{m.from.level}</i><Avatar value={m.from.avatar} className="inline" /> {m.from.username}{m.kind === 'chat' ? ':' : ''}</b>} {m.text}
           </div>
         ))}
       </div>
@@ -220,7 +221,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
             <h3>Odadakiler ({room.members.length})</h3>
             {room.members.map(m => (
               <div key={m.id} className="row" onClick={() => { setShowMembers(false); setCard(m.id); }}>
-                <span className="av">{m.avatar}</span><div className="grow"><b>{m.username}</b><small>Lv.{m.level}</small></div>
+                <span className="av"><Avatar value={m.avatar} /></span><div className="grow"><b>{m.username}</b><small>Lv.{m.level}</small></div>
                 {room.ownerId === m.id && <span>👑</span>}
               </div>
             ))}

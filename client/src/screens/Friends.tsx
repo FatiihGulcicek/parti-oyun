@@ -3,6 +3,7 @@ import { useApp } from '../App';
 import { call, Profile } from '../net';
 import UserCard from '../components/UserCard';
 import { IconSearch } from '../components/Icons';
+import Avatar from '../components/Avatar';
 
 type Friend = Profile & { online: boolean; room: { roomId: string; roomName: string } | null };
 
@@ -46,7 +47,7 @@ export default function Friends({ onSeen }: { onSeen: () => void }) {
           <h4>Arama sonuçları</h4>
           {results.map(u => (
             <div key={u.id} className="row" onClick={() => setCard(u.id)}>
-              <span className="av">{u.avatar}</span><div className="grow"><b>{u.username}</b><small>Lv.{u.level}</small></div>
+              <span className="av"><Avatar value={u.avatar} /></span><div className="grow"><b>{u.username}</b><small>Lv.{u.level}</small></div>
               <span className="chev">›</span>
             </div>
           ))}
@@ -58,7 +59,7 @@ export default function Friends({ onSeen }: { onSeen: () => void }) {
           <h4>Gelen istekler</h4>
           {data.incoming.map(u => (
             <div key={u.id} className="row">
-              <span className="av" onClick={() => setCard(u.id)}>{u.avatar}</span>
+              <span className="av" onClick={() => setCard(u.id)}><Avatar value={u.avatar} /></span>
               <div className="grow"><b>{u.username}</b><small>Lv.{u.level}</small></div>
               <button className="btn small primary" onClick={() => respond(u.id, true)}>Kabul</button>
               <button className="btn small ghost" onClick={() => respond(u.id, false)}>Reddet</button>
@@ -73,7 +74,7 @@ export default function Friends({ onSeen }: { onSeen: () => void }) {
         {data && sorted.length === 0 && <p className="empty">Henüz arkadaşın yok. Odalarda tanıştığın kişilerin profiline dokunup ekleyebilirsin.</p>}
         {sorted.map(f => (
           <div key={f.id} className="row" onClick={() => setCard(f.id)}>
-            <span className={`av ${f.online ? 'online' : ''}`}>{f.avatar}</span>
+            <span className={`av ${f.online ? 'online' : ''}`}><Avatar value={f.avatar} /></span>
             <div className="grow">
               <b>{f.username}</b>
               <small>{f.room ? `📍 ${f.room.roomName}` : f.online ? 'Çevrimiçi' : 'Çevrimdışı'}</small>
@@ -87,7 +88,7 @@ export default function Friends({ onSeen }: { onSeen: () => void }) {
         <section>
           <h4>Gönderilen istekler</h4>
           {data.outgoing.map(u => (
-            <div key={u.id} className="row dim"><span className="av">{u.avatar}</span><div className="grow"><b>{u.username}</b><small>Bekliyor…</small></div></div>
+            <div key={u.id} className="row dim"><span className="av"><Avatar value={u.avatar} /></span><div className="grow"><b>{u.username}</b><small>Bekliyor…</small></div></div>
           ))}
         </section>
       )}

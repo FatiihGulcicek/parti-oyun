@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../App';
 import { call, FullProfile } from '../net';
+import Avatar from './Avatar';
 
 const REPORT_REASONS = [
   { id: 'insult', label: '🤬 Hakaret / küfür' },
@@ -94,7 +95,7 @@ export default function UserCard({ userId, onClose, onGift, onKick, onRoomKick }
           </>
         ) : (
           <>
-            <div className="av-xl">{p.avatar}</div>
+            <div className="av-xl"><Avatar value={p.avatar} /></div>
             <h3>{p.username} <span className="lv">Lv.{p.level}</span></h3>
             {blocked && <span className="blocked-tag">🚫 Engellendi</span>}
             {p.bio && <p className="bio">{p.bio}</p>}

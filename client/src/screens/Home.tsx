@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../App';
 import { call } from '../net';
 import { IconPlus } from '../components/Icons';
+import Avatar from '../components/Avatar';
 
 type GameId = 'uno' | 'chat' | 'ludo';
 interface RoomSummary {
@@ -83,7 +84,7 @@ export default function Home() {
     <div className="home">
       <header className="home-top">
         <div className="me-chip">
-          <span className="av">{me.avatar}</span>
+          <span className="av"><Avatar value={me.avatar} /></span>
           <div><b>{me.username}</b><span className="lv">Lv.{me.level}</span></div>
         </div>
         <WalletPill />
@@ -138,7 +139,7 @@ export default function Home() {
             </div>
             <div className="rc-body">
               <b>{r.name}</b>
-              <small>{r.owner ? <>{r.owner.avatar} {r.owner.username}</> : r.topic || 'Herkese açık'}</small>
+              <small>{r.owner ? <><Avatar value={r.owner.avatar} className="inline" /> {r.owner.username}</> : r.topic || 'Herkese açık'}</small>
               <span className="rc-seats">🪑 {r.seated}/9</span>
             </div>
           </button>
