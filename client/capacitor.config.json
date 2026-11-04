@@ -1,0 +1,7 @@
+{
+  "appId": "com.parti.app",
+  "appName": "Parti",
+  "webDir": "dist",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" }
+}

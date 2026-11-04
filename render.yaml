@@ -1,0 +1,21 @@
+# Render.com ücretsiz Web Service (Blueprint). Ortam değişkenlerini panelden gir.
+services:
+  - type: web
+    name: parti
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm run setup && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
