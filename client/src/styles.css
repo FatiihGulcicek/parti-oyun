@@ -117,6 +117,22 @@ h1, h2, h3, .display { font-family: var(--display); line-height: 1.1; }
 .avatar-grid button:active { transform: scale(.92); }
 .avatar-grid button.on { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--brand); transform: scale(1.06); }
 
+.lc-title { font-size: 20px; text-align: center; }
+.login-head { display: flex; align-items: center; gap: 8px; }
+.login-head .lc-title { flex: 1; text-align: left; }
+.icon-btn.light { background: var(--surface2); color: var(--ink); width: 38px; height: 38px; }
+.auth-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 13px 16px; border-radius: 16px; font-weight: 800; font-size: 16px; transition: transform .1s, box-shadow .15s; }
+.auth-btn:active:not(:disabled) { transform: scale(.97); }
+.auth-btn span { flex: 1; text-align: center; margin-right: 22px; }
+.auth-btn.google { background: #fff; color: #1f1f1f; box-shadow: inset 0 0 0 2px #e6e1f2; }
+.auth-btn.apple { background: #000; color: #fff; }
+.auth-btn.email { background: var(--grad); color: #fff; box-shadow: 0 8px 20px rgba(160, 60, 255, .3); }
+.or { display: flex; align-items: center; gap: 10px; color: var(--mut); font-size: 12px; font-weight: 800; }
+.or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.link-btn { color: var(--brand); font-weight: 800; font-size: 14px; padding: 4px; align-self: center; }
+.link-btn.right { align-self: flex-end; margin-top: -4px; font-size: 13px; }
+.info { background: #e6fbf3; color: #0d7a55; padding: 10px 12px; border-radius: 14px; font-size: 14px; font-weight: 700; }
+
 /* ---------- alt sekme */
 .tabbar { position: absolute; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); display: flex; z-index: 5;
   background: rgba(255,255,255,.96); backdrop-filter: blur(14px); border-radius: 26px; padding: 7px; box-shadow: 0 10px 30px rgba(76,42,160,.18); }

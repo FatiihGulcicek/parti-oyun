@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { bus, call, connect, loadConfig, logout, restoreSession, FullProfile, ServerConfig, Wallet } from './net';
+import { bus, call, clearPasswordRecovery, connect, isPasswordRecovery, loadConfig, logout, restoreSession, updatePassword, FullProfile, ServerConfig, Wallet } from './net';
 import Login from './screens/Login';
 import Home from './screens/Home';
 import Friends from './screens/Friends';
 import ProfileScreen from './screens/Profile';
 import RoomScreen from './screens/Room';
+import Onboarding from './screens/Onboarding';
 import { IconHome, IconUser, IconUsers } from './components/Icons';
 import './styles.css';
 import { avatarText } from './components/Avatar';
@@ -33,6 +34,8 @@ export default function App() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; m: string }[]>([]);
   const [friendBadge, setFriendBadge] = useState(0);
+  const [recovery, setRecovery] = useState(isPasswordRecovery());
+  useEffect(() => { const on = () => setRecovery(true); bus.on('auth:recovery', on); return () => bus.off('auth:recovery', on); }, []);
 
   const toast = useCallback((m: string) => {
     const id = Math.random();
@@ -93,7 +96,7 @@ export default function App() {
   return (
     <AppCtx.Provider value={ctx}>
       <div className="app">
-        {roomId ? (
+        {me.onboarded === false ? <Onboarding /> : roomId ? (
           <RoomScreen key={roomId} roomId={roomId} onExit={() => { setRoomId(null); if (history.state?.room) history.back(); }} />
         ) : (
           <>
@@ -110,8 +113,35 @@ export default function App() {
             </nav>
           </>
         )}
+        {recovery && <NewPassword onDone={() => { clearPasswordRecovery(); setRecovery(false); }} toast={toast} />}
         <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.m}</div>)}</div>
       </div>
     </AppCtx.Provider>
+  );
+}
+
+/** Şifre sıfırlama bağlantısıyla gelindiğinde yeni şifre belirleme. */
+function NewPassword({ onDone, toast }: { onDone: () => void; toast: (m: string) => void }) {
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (pw.length < 6) return setErr('Şifre en az 6 karakter olmalı');
+    setBusy(true); setErr('');
+    try { await updatePassword(pw); toast('Şifren güncellendi 🔐'); onDone(); }
+    catch (e: any) { setErr(e?.message || 'Şifre güncellenemedi'); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="sheet-bg">
+      <form className="sheet" onSubmit={save}>
+        <h3>Yeni şifreni belirle 🔐</h3>
+        <input type="password" placeholder="Yeni şifre (en az 6 karakter)" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" autoFocus />
+        {err && <div className="err">{err}</div>}
+        <button className="btn primary big" disabled={busy}>{busy ? '…' : 'Kaydet'}</button>
+        <button type="button" className="btn ghost" onClick={onDone}>Şimdi değil</button>
+      </form>
+    </div>
   );
 }

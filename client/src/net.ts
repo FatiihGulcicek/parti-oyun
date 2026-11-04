@@ -15,7 +15,7 @@ export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
 
 export interface ServerConfig { mode: 'supabase'; voice: boolean }
 export interface Profile { id: string; username: string; avatar: string; level: number }
-export interface FullProfile extends Profile { bio: string; charm: number; wealth: number }
+export interface FullProfile extends Profile { bio: string; charm: number; wealth: number; onboarded?: boolean }
 export interface Wallet { diamonds: number; coins: number; canClaimDaily: boolean }
 type Res<T = {}> = T & { ok: boolean; error?: string };
 
@@ -89,6 +89,60 @@ export async function login(username: string, password: string) {
   if (error) throw new Error(/invalid/i.test(error.message) ? 'Kullanıcı adı veya şifre hatalı' : error.message);
   return data.session!.access_token;
 }
+
+// ---------------------------------------------------------------- Google / Apple / e-posta
+export type OAuthProvider = 'google' | 'apple';
+/** Giriş sonrası dönülecek adres (sorgu dizesi korunur, ör. ?ayri). */
+const returnUrl = () => location.origin + location.pathname + location.search;
+
+function authError(m: string) {
+  if (/invalid login credentials/i.test(m)) return 'E-posta veya şifre hatalı';
+  if (/already registered|already exists/i.test(m)) return 'Bu e-posta zaten kayıtlı, giriş yapmayı dene';
+  if (/email not confirmed/i.test(m)) return 'Önce e-postandaki doğrulama bağlantısına tıkla';
+  if (/rate limit|too many|security purposes/i.test(m)) return 'Çok fazla deneme, biraz sonra tekrar dene';
+  if (/provider is not enabled|unsupported provider/i.test(m)) return 'Bu giriş yöntemi henüz açılmadı';
+  if (/password should be|weak/i.test(m)) return 'Şifre en az 6 karakter olmalı';
+  if (/invalid.*email|valid email/i.test(m)) return 'Geçerli bir e-posta adresi yaz';
+  return 'Giriş yapılamadı, tekrar dene';
+}
+
+/** Google / Apple: sağlayıcının sayfasına yönlendirir, dönüşte oturum otomatik açılır. */
+export async function oauthLogin(provider: OAuthProvider) {
+  const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo: returnUrl() } });
+  if (error) throw new Error(authError(error.message));
+}
+
+export async function emailLogin(email: string, password: string) {
+  const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+  if (error) throw new Error(authError(error.message));
+  return data.session!.access_token;
+}
+
+/** E-posta ile kayıt. Doğrulama açıksa oturum gelmez → null döner (e-posta kutusunu kontrol et). */
+export async function emailRegister(email: string, password: string, avatar: string): Promise<string | null> {
+  const { data, error } = await sb.auth.signUp({
+    email: email.trim(), password, options: { emailRedirectTo: returnUrl(), data: { avatar } },
+  });
+  if (error) throw new Error(authError(error.message));
+  // aynı e-posta zaten kayıtlıysa Supabase kimliksiz bir kullanıcı döndürür
+  if (data.user && (data.user.identities?.length ?? 0) === 0) throw new Error('Bu e-posta zaten kayıtlı, giriş yapmayı dene');
+  return data.session?.access_token ?? null;
+}
+
+export async function sendPasswordReset(email: string) {
+  const { error } = await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: returnUrl() });
+  if (error) throw new Error(authError(error.message));
+}
+
+export async function updatePassword(password: string) {
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) throw new Error(authError(error.message));
+}
+
+/** Şifre sıfırlama bağlantısıyla gelindiyse true (uygulama yeni şifre sorar). */
+let recovering = /type=recovery/.test(location.hash);
+export const isPasswordRecovery = () => recovering;
+export const clearPasswordRecovery = () => { recovering = false; };
 
 let globalChannel: RealtimeChannel | null = null;
 
@@ -283,7 +337,10 @@ window.addEventListener('pagehide', () => {
     body: JSON.stringify({ p_room: cur.id }),
   }).catch(() => {});
 });
-sb.auth.onAuthStateChange((_e, s) => { (sb as any).auth.session = s; });
+sb.auth.onAuthStateChange((e, s) => {
+  (sb as any).auth.session = s;
+  if (e === 'PASSWORD_RECOVERY') { recovering = true; bus.emit('auth:recovery'); }
+});
 
 // ---------------------------------------------------------------- tek API
 export async function call<T = any>(event: string, p: any = {}): Promise<Res<T>> {
@@ -336,6 +393,11 @@ async function handle(event: string, p: any): Promise<any> {
     case 'profile:get': {
       const { data } = await sb.from('profiles').select('id,username,avatar,level,bio,charm,wealth').eq('id', p.id).maybeSingle();
       return data ? { ok: true, profile: data, blocked: blocked.has(data.id) } : err('Profil bulunamadı');
+    }
+    case 'profile:onboard': {
+      const r = await rpc('complete_onboarding', { p_username: String(p.username ?? '').trim(), p_avatar: p.avatar });
+      if (r?.ok) await profiles([uid], true);
+      return r?.ok ? r : err(r?.error ?? 'Profil kaydedilemedi');
     }
     case 'profile:update': {
       const patch: any = {};
