@@ -73,6 +73,12 @@ export default function App() {
     if (r.ok) { setMe(r.profile); setWalletState(r.wallet); }
   }, []);
 
+  /** Yönetici / yasak durumu: girişte, "Ben" sekmesine geçişte ve uygulamaya dönüldüğünde yenilenir. */
+  const refreshStatus = useCallback(async () => {
+    const st = await call<{ admin: boolean; bannedUntil: string | null; banReason: string | null }>('status:get');
+    if (st.ok) setStatus({ admin: st.admin, bannedUntil: st.bannedUntil, banReason: st.banReason });
+  }, []);
+
   const start = useCallback(async (token: string) => {
     try {
       await connect(token);
@@ -82,14 +88,13 @@ export default function App() {
         if (p.status === 'accepted') toast(`${avatarText(p.from.avatar)} ${p.from.username} artık arkadaşın!`);
       });
       await refreshMe();
-      const st = await call<{ admin: boolean; bannedUntil: string | null; banReason: string | null }>('status:get');
-      if (st.ok) setStatus({ admin: st.admin, bannedUntil: st.bannedUntil, banReason: st.banReason });
+      await refreshStatus();
       setPhase('ready');
     } catch {
       await logout();
       setPhase('login');
     }
-  }, [refreshMe, toast]);
+  }, [refreshMe, refreshStatus, toast]);
 
   useEffect(() => {
     (async () => {
@@ -100,6 +105,14 @@ export default function App() {
       } catch { setPhase('offline'); }
     })();
   }, [start]);
+
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    if (tab === 'profile') refreshStatus();
+    const onVis = () => { if (document.visibilityState === 'visible') refreshStatus(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [phase, tab, refreshStatus]);
 
   // Android geri tuşu / tarayıcı geri: odadan çık
   useEffect(() => {
