@@ -39,7 +39,10 @@ export default function Friends({ onSeen }: { onSeen: () => void }) {
 
   return (
     <div className="friends">
-      <header className="topbar"><h2>Arkadaşlar</h2></header>
+      <header className="app-header">
+        <div className="ah-title"><h2>Arkadaşlar</h2><small>{data ? `${sorted.filter(f => f.online).length} çevrimiçi · ${sorted.length} arkadaş` : 'Yükleniyor…'}</small></div>
+        {data && data.incoming.length > 0 && <span className="ah-badge">{data.incoming.length} yeni istek</span>}
+      </header>
       <label className="search"><IconSearch size={20} /><input placeholder="Kullanıcı ara…" value={q} onChange={e => setQ(e.target.value)} /></label>
 
       {results.length > 0 && (

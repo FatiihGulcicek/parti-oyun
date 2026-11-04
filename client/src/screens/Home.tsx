@@ -19,12 +19,17 @@ const SLIDES: { game: GameId; title: string; text: string; cta: string; art: str
   { game: 'chat', title: 'Sesli sohbet odaları', text: 'Koltuğa otur, mikrofonu aç, yeni insanlarla tanış.', cta: 'Odaya gir', art: '🎙️', tone: 'tone-chat' },
 ];
 
+const compact = (n: number) => n >= 10_000 ? `${(n / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}B` : n.toLocaleString('tr-TR');
+
+/** Cüzdan kapsülü: elmas + altın, yanında mağaza düğmesi. */
 export function WalletPill() {
-  const { wallet } = useApp();
+  const { wallet, toast } = useApp();
   return (
     <div className="wallet-pill">
-      <span className="wp-dia">💎 {wallet.diamonds.toLocaleString('tr-TR')}</span>
-      <span className="wp-coin">🪙 {wallet.coins.toLocaleString('tr-TR')}</span>
+      <span className="wp-item"><i className="wp-ic dia">💎</i>{compact(wallet.diamonds)}</span>
+      <span className="wp-sep" />
+      <span className="wp-item"><i className="wp-ic coin">🪙</i>{compact(wallet.coins)}</span>
+      <button className="wp-add" aria-label="Elmas al" onClick={() => toast('Elmas mağazası yakında 💎')}>+</button>
     </div>
   );
 }
@@ -82,10 +87,13 @@ export default function Home() {
 
   return (
     <div className="home">
-      <header className="home-top">
+      <header className="app-header">
         <div className="me-chip">
-          <span className="av"><Avatar value={me.avatar} /></span>
-          <div><b>{me.username}</b><span className="lv">Lv.{me.level}</span></div>
+          <span className="me-av"><span className="av"><Avatar value={me.avatar} /></span><i className="me-lv">{me.level}</i></span>
+          <div>
+            <small className="hello">Merhaba 👋</small>
+            <b>{me.username}</b>
+          </div>
         </div>
         <WalletPill />
       </header>
