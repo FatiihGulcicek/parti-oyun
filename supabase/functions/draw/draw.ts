@@ -48,7 +48,7 @@ export function shuffle<T>(arr: T[], rnd: () => number = Math.random): T[] {
 /** Karşılaştırma için sadeleştirme: Türkçe küçük harf, aksan/boşluk farkı yok. */
 export function norm(t: string): string {
   return t.toLocaleLowerCase('tr-TR')
-    .replace(/[çc]/g, 'c').replace(/[ğg]/g, 'g').replace(/[ıi̇i]/g, 'i').replace(/[öo]/g, 'o').replace(/[şs]/g, 's').replace(/[üu]/g, 'u')
+    .replace(/[çc]/g, 'c').replace(/[ğg]/g, 'g').replace(/[ıi]/g, 'i').replace(/[öo]/g, 'o').replace(/[şs]/g, 's').replace(/[üu]/g, 'u')
     .replace(/[^a-z0-9]/g, '');
 }
 
