@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { call, Profile } from '../net';
 import { useApp } from '../App';
+import Avatar from './Avatar';
 
 export type Color = 'red' | 'yellow' | 'green' | 'blue';
 export interface Card { id: number; color: Color | 'wild'; value: string }
@@ -98,7 +99,7 @@ export default function UnoTable({ view, people }: { view: UnoView; people: Map<
           return (
             <div key={p.id} className={`opp ${isTurn ? 'turn' : ''} ${p.id === me.id ? 'me' : ''}`}>
               <div className="opp-av" style={isTurn ? { ['--pct' as any]: `${(left / 25000) * 100}%` } : undefined}>
-                <span>{pr?.avatar ?? '❔'}</span>
+                <span><Avatar value={pr?.avatar} /></span>
               </div>
               <small>{pr?.username ?? '…'}</small>
               <div className="opp-count"><span className="mini-back" />{p.count}</div>
@@ -166,7 +167,7 @@ export default function UnoTable({ view, people }: { view: UnoView; people: Map<
         <div className="win-overlay">
           <div className="confetti">{Array.from({ length: 24 }, (_, i) => <i key={i} style={{ ['--i' as any]: i }} />)}</div>
           <div className="win-card">
-            <div className="av-xl">{people.get(view.winner)?.avatar}</div>
+            <div className="av-xl"><Avatar value={people.get(view.winner)?.avatar} /></div>
             <h2>{name(view.winner)}</h2>
             <p>{view.winner === me.id ? 'Tebrikler, kazandın! 🎉' : 'Uno şampiyonu! 🏆'}</p>
           </div>

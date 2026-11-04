@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useApp } from '../App';
 import { call } from '../net';
-import { AVATARS } from './Login';
+import Avatar from '../components/Avatar';
+import { AvatarPicker } from '../components/AvatarPicker';
 import { WalletPill } from './Home';
 
 export default function ProfileScreen() {
-  const { me, wallet, refreshMe, setWallet, toast, signOut, config } = useApp();
+  const { me, wallet, refreshMe, setWallet, toast, signOut, config, isAdmin, openAdmin, settings } = useApp();
+  const daily = { d: Number(settings.economy?.daily_diamonds ?? 50), c: Number(settings.economy?.daily_coins ?? 200) };
   let loginName = '';
   try { loginName = localStorage.getItem('parti.login') ?? me.username; } catch { loginName = me.username; }
   const [editing, setEditing] = useState(false);
@@ -14,10 +16,10 @@ export default function ProfileScreen() {
   const [avatar, setAvatar] = useState(me.avatar);
 
   async function claim() {
-    const r = await call<{ diamonds: number; coins: number }>('daily:claim');
+    const r = await call<{ diamonds: number; coins: number; got_diamonds?: number; got_coins?: number }>('daily:claim');
     if (!r.ok) return toast(r.error!);
     setWallet({ diamonds: r.diamonds, coins: r.coins, canClaimDaily: false });
-    toast('🎁 +50 💎  +200 🪙');
+    toast(`🎁 +${r.got_diamonds ?? daily.d} 💎  +${r.got_coins ?? daily.c} 🪙`);
   }
 
   async function save() {
@@ -33,28 +35,36 @@ export default function ProfileScreen() {
 
   return (
     <div className="profile">
-      <header className="topbar"><h2>Profilim</h2><WalletPill /></header>
+      <div className="profile-cover">
+        <header className="topbar"><h2>Profilim</h2><WalletPill /></header>
+      </div>
       <div className="profile-hero">
-        <div className="av-xl">{me.avatar}</div>
+        <div className="av-xl"><Avatar value={me.avatar} /></div>
         <h2>{me.username} <span className="lv">Lv.{me.level}</span></h2>
         <p className="bio">{me.bio || 'Henüz bir şey yazmadın.'}</p>
-        <div className="lvbar"><i style={{ width: `${pct}%` }} /></div>
-        <small className="muted">Sonraki seviye: {me.wealth.toLocaleString('tr-TR')} / {nextLv.toLocaleString('tr-TR')} servet</small>
         <div className="stats">
           <div><b>💖 {me.charm.toLocaleString('tr-TR')}</b><small>Çekicilik</small></div>
           <div><b>👑 {me.wealth.toLocaleString('tr-TR')}</b><small>Servet</small></div>
+          <div><b>⭐ {me.level}</b><small>Seviye</small></div>
         </div>
       </div>
 
+      <div className="card level-card">
+        <div className="lc-head"><b>Seviye {me.level}</b><small>{me.wealth.toLocaleString('tr-TR')} / {nextLv.toLocaleString('tr-TR')} servet</small></div>
+        <div className="lvbar"><i style={{ width: `${pct}%` }} /></div>
+        <small className="muted">Hediye gönderdikçe servetin ve seviyen artar.</small>
+      </div>
+
       <div className="card daily">
-        <div><b>Günlük ödül</b><small>Her gün 50 💎 + 200 🪙</small></div>
+        <span className="daily-ic">🎁</span>
+        <div><b>Günlük ödül</b><small>Her gün {daily.d} 💎 + {daily.c} 🪙</small></div>
         <button className="btn gold" disabled={!wallet.canClaimDaily} onClick={claim}>{wallet.canClaimDaily ? 'Topla' : 'Alındı ✓'}</button>
       </div>
 
       {editing ? (
         <div className="card edit">
-          <label>Avatar</label>
-          <div className="avatar-grid">{AVATARS.map(a => <button key={a} className={a === avatar ? 'on' : ''} onClick={() => setAvatar(a)}>{a}</button>)}</div>
+          <label>Karakter</label>
+          <AvatarPicker value={avatar} onChange={setAvatar} />
           <label>Kullanıcı adı</label>
           <input value={username} onChange={e => setUsername(e.target.value)} maxLength={20} />
           <label>Hakkımda</label>
@@ -66,6 +76,7 @@ export default function ProfileScreen() {
         </div>
       ) : (
         <div className="menu">
+          {isAdmin && <button className="menu-admin" onClick={openAdmin}>🛠️ Yönetim Paneli<span>›</span></button>}
           <button onClick={() => setEditing(true)}>✏️ Profili düzenle<span>›</span></button>
           <button onClick={() => toast('Mağaza yakında: elmas paketleri (Google Play / App Store ödemesi)')}>🛍️ Elmas mağazası<span>›</span></button>
           <button onClick={signOut}>🚪 Çıkış yap<span>›</span></button>

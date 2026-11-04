@@ -1,6 +1,7 @@
 // Bağlantı katmanı: arayüz `call(olay, veri)` ve `bus` olaylarını kullanır,
 // bu dosya bunları Supabase (RPC + Realtime + Edge Functions) çağrılarına çevirir.
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
+import { meta } from './games';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://qtusjbviruqfwolbsvgx.supabase.co';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ||
@@ -14,8 +15,8 @@ export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 export interface ServerConfig { mode: 'supabase'; voice: boolean }
-export interface Profile { id: string; username: string; avatar: string; level: number }
-export interface FullProfile extends Profile { bio: string; charm: number; wealth: number }
+export interface Profile { id: string; username: string; avatar: string; level: number; is_bot?: boolean }
+export interface FullProfile extends Profile { bio: string; charm: number; wealth: number; onboarded?: boolean }
 export interface Wallet { diamonds: number; coins: number; canClaimDaily: boolean }
 type Res<T = {}> = T & { ok: boolean; error?: string };
 
@@ -31,6 +32,9 @@ export const bus = {
 // ---------------------------------------------------------------- yardımcılar
 let uid = '';
 export const myId = () => uid;
+/** Engellediğim kullanıcılar (sunucu RLS ile de süzer; burası anlık tepki için). */
+const blocked = new Set<string>();
+export const isBlocked = (id?: string | null) => Boolean(id && blocked.has(id));
 const REASONS: Record<string, string> = {
   insufficient: 'Yetersiz elmas 💎', self_gift: 'Kendine hediye gönderemezsin', already_claimed: 'Bugünkü ödülü zaten aldın',
   bad_qty: 'Geçersiz adet', no_gift: 'Hediye bulunamadı', no_receiver: 'Alıcı odada değil', self: 'Kendini ekleyemezsin',
@@ -44,7 +48,7 @@ const profCache = new Map<string, Profile>();
 async function profiles(ids: string[], force = false): Promise<Map<string, Profile>> {
   const need = [...new Set(ids)].filter(id => id && (force || !profCache.has(id)));
   if (need.length) {
-    const { data } = await sb.from('profiles').select('id,username,avatar,level').in('id', need);
+    const { data } = await sb.from('profiles').select('id,username,avatar,level,is_bot').in('id', need);
     for (const p of data ?? []) profCache.set(p.id, p as Profile);
   }
   return profCache;
@@ -52,7 +56,11 @@ async function profiles(ids: string[], force = false): Promise<Map<string, Profi
 
 async function rpc(fn: string, args?: Record<string, unknown>): Promise<any> {
   const { data, error } = await sb.rpc(fn, args);
-  if (error) { console.error(fn, error); return err(/JWT|auth/i.test(error.message) ? 'Oturum süresi doldu, tekrar giriş yap' : 'Sunucu hatası'); }
+  if (error) {
+    console.error(fn, error);
+    if (/forbidden/i.test(error.message)) return err('Bu işlem için yetkin yok');
+    return err(/JWT|auth/i.test(error.message) ? 'Oturum süresi doldu, tekrar giriş yap' : 'Sunucu hatası');
+  }
   return data;
 }
 
@@ -87,7 +95,67 @@ export async function login(username: string, password: string) {
   return data.session!.access_token;
 }
 
+// ---------------------------------------------------------------- Google / Apple / e-posta
+export type OAuthProvider = 'google' | 'apple';
+/** Giriş sonrası dönülecek adres (sorgu dizesi korunur, ör. ?ayri). */
+const returnUrl = () => location.origin + location.pathname + location.search;
+
+function authError(m: string) {
+  if (/invalid login credentials/i.test(m)) return 'E-posta veya şifre hatalı';
+  if (/already registered|already exists/i.test(m)) return 'Bu e-posta zaten kayıtlı, giriş yapmayı dene';
+  if (/email not confirmed/i.test(m)) return 'Önce e-postandaki doğrulama bağlantısına tıkla';
+  if (/rate limit|too many|security purposes/i.test(m)) return 'Çok fazla deneme, biraz sonra tekrar dene';
+  if (/provider is not enabled|unsupported provider/i.test(m)) return 'Bu giriş yöntemi henüz açılmadı';
+  if (/password should be|weak/i.test(m)) return 'Şifre en az 6 karakter olmalı';
+  if (/invalid.*email|valid email/i.test(m)) return 'Geçerli bir e-posta adresi yaz';
+  return 'Giriş yapılamadı, tekrar dene';
+}
+
+/** Google / Apple: sağlayıcının sayfasına yönlendirir, dönüşte oturum otomatik açılır. */
+export async function oauthLogin(provider: OAuthProvider) {
+  const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo: returnUrl() } });
+  if (error) throw new Error(authError(error.message));
+}
+
+export async function emailLogin(email: string, password: string) {
+  const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+  if (error) throw new Error(authError(error.message));
+  return data.session!.access_token;
+}
+
+/** E-posta ile kayıt. Doğrulama açıksa oturum gelmez → null döner (e-posta kutusunu kontrol et). */
+export async function emailRegister(email: string, password: string, avatar: string): Promise<string | null> {
+  const { data, error } = await sb.auth.signUp({
+    email: email.trim(), password, options: { emailRedirectTo: returnUrl(), data: { avatar } },
+  });
+  if (error) throw new Error(authError(error.message));
+  // aynı e-posta zaten kayıtlıysa Supabase kimliksiz bir kullanıcı döndürür
+  if (data.user && (data.user.identities?.length ?? 0) === 0) throw new Error('Bu e-posta zaten kayıtlı, giriş yapmayı dene');
+  return data.session?.access_token ?? null;
+}
+
+export async function sendPasswordReset(email: string) {
+  const { error } = await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: returnUrl() });
+  if (error) throw new Error(authError(error.message));
+}
+
+export async function updatePassword(password: string) {
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) throw new Error(authError(error.message));
+}
+
+/** Şifre sıfırlama bağlantısıyla gelindiyse true (uygulama yeni şifre sorar). */
+let recovering = /type=recovery/.test(location.hash);
+export const isPasswordRecovery = () => recovering;
+export const clearPasswordRecovery = () => { recovering = false; };
+
 let globalChannel: RealtimeChannel | null = null;
+
+/** Uygulama ayarları: { theme, announcement, games } */
+export async function loadSettings(): Promise<Record<string, any>> {
+  const { data } = await sb.from('app_settings').select('key,value');
+  return Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value]));
+}
 
 /** Giriş sonrası: kullanıcıyı belirle, arkadaşlık bildirimlerini dinle. */
 export async function connect(_token?: string) {
@@ -96,12 +164,19 @@ export async function connect(_token?: string) {
   uid = data.user.id;
   const { data: prof } = await sb.from('profiles').select('id').eq('id', uid).maybeSingle();
   if (!prof) throw new Error('no_profile');
+  const { data: bl } = await sb.from('user_blocks').select('blocked');
+  blocked.clear();
+  for (const b of bl ?? []) blocked.add(b.blocked);
   if (globalChannel) sb.removeChannel(globalChannel);
   globalChannel = sb.channel('me-' + uid)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'friendships' }, async ({ new: f }: any) => {
       if (f.addressee !== uid) return;
       const p = (await profiles([f.requester])).get(f.requester);
       bus.emit('friends:changed', { from: p, status: f.status });
+    })
+    // yönetim ayarları (tema, duyuru, kapalı oyunlar) anında herkese yansır
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, async () => {
+      bus.emit('settings:changed', await loadSettings());
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships' }, async ({ new: f }: any) => {
       if (f.status !== 'accepted' || f.requester !== uid) return;
@@ -124,7 +199,7 @@ export function watchTokenRefresh() { /* supabase-js jetonu kendisi yeniler */ }
 let voiceEnabled = false;
 
 interface RoomCtx {
-  id: string; channel: RealtimeChannel; hb: number; rebuildTimer?: number;
+  id: string; game?: string; channel: RealtimeChannel; hb: number; rebuildTimer?: number;
   pub: any | null; hand: any[] | null; handVersion: number; skew: number; timeoutTimer?: number; endTimer?: number;
 }
 let cur: RoomCtx | null = null;
@@ -158,23 +233,43 @@ function scheduleRebuild(ctx: RoomCtx) {
   }, 120);
 }
 
+/** Odanın oyununa göre hakem Edge Function'ı (games.ts). */
+const refereeFor = (game?: string) => meta(game).referee ?? 'game';
+
+/**
+ * Oyun durumunu ekrana yayar. Uno: 'uno:state' (eski biçim). Diğer tüm oyunlar: 'game:state' →
+ * herkese açık görünüm + `mine` (yalnızca bana ait gizli bilgi: el, kelime…).
+ */
 function emitUno(ctx: RoomCtx) {
-  if (cur !== ctx) return;
+  if (cur !== ctx || !ctx.game) return;
   clearTimeout(ctx.timeoutTimer);
   const gp = ctx.pub;
-  if (!gp || (gp.winner && Date.now() - Date.parse(gp.updated_at) > 10_000)) { bus.emit('uno:state', null); return; }
+  const ev = ctx.game === 'uno' ? 'uno:state' : 'game:state';
+  if (!gp || (gp.winner && Date.now() - Date.parse(gp.updated_at) > 12_000)) { bus.emit(ev, null); return; }
   const deadline = Date.parse(gp.deadline) + ctx.skew;
+  if (ctx.game !== 'uno') {
+    const inGame = gp.players.includes(uid);
+    const mine = inGame ? (ctx.hand ?? null) : null;
+    const syncing = inGame && ctx.hand !== null && ctx.handVersion !== gp.version;
+    bus.emit(ev, { ...gp.view, game: ctx.game, mine, syncing, version: gp.version, deadline, serverNow: Date.now() });
+    scheduleGameTimers(ctx, gp, deadline);
+    return;
+  }
   const mine = gp.players.includes(uid) ? (ctx.hand ?? []) : null;
   // elim herkese açık durumdan geride ise (realtime sırası) bir anlığına hamle yaptırma
   const syncing = mine !== null && ctx.handVersion !== gp.version;
-  bus.emit('uno:state', { ...gp.view, myHand: mine, syncing, deadline, serverNow: Date.now() });
+  bus.emit(ev, { ...gp.view, myHand: mine, syncing, deadline, serverNow: Date.now() });
+  scheduleGameTimers(ctx, gp, deadline);
+}
+
+function scheduleGameTimers(ctx: RoomCtx, gp: any, deadline: number) {
   if (gp.winner) {
     clearTimeout(ctx.endTimer);
-    ctx.endTimer = window.setTimeout(() => { emitUno(ctx); scheduleRebuild(ctx); }, 10_500);
+    ctx.endTimer = window.setTimeout(() => { emitUno(ctx); scheduleRebuild(ctx); }, 12_500);
   } else {
     // süre dolarsa odadaki herhangi biri hakemden otomatik hamle ister
     const wait = Math.max(0, deadline - Date.now()) + 1200 + Math.random() * 1500;
-    ctx.timeoutTimer = window.setTimeout(() => { if (cur === ctx) fn('game', { room: ctx.id, action: 'timeout' }); }, wait);
+    ctx.timeoutTimer = window.setTimeout(() => { if (cur === ctx) fn(refereeFor(ctx.game), { room: ctx.id, action: 'timeout' }); }, wait);
   }
 }
 
@@ -194,6 +289,13 @@ async function joinRoom(id: string) {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, () => scheduleRebuild(ctx))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_messages', filter: `room_id=eq.${id}` }, async ({ new: m }: any) => {
       if (cur !== ctx) return;
+      if (m.kind === 'system' && m.meta?.kicked === uid) { bus.emit('room:kicked', m.meta.by === 'admin' ? 'Yönetici seni odadan çıkardı' : 'Oda sahibi seni odadan attı'); return; }
+      // yönetici işlemleri: sohbet temizleme, mesaj silme, oyunu durdurma
+      if (m.kind === 'system' && m.meta?.cleared) bus.emit('chat:clear', null);
+      if (m.kind === 'system' && m.meta?.deleted) bus.emit('chat:delete', { id: m.meta.deleted });
+      if (m.kind === 'system' && m.meta?.deleted_user) bus.emit('chat:delete', { userId: m.meta.deleted_user });
+      if (m.kind === 'system' && m.meta?.game_stopped) { ctx.pub = null; ctx.hand = null; ctx.handVersion = -1; emitUno(ctx); }
+      if (m.kind === 'chat' && blocked.has(m.user_id)) return;
       const msg = await toMsg(m);
       bus.emit('chat:msg', msg);
       if (m.kind === 'system') scheduleRebuild(ctx);
@@ -216,12 +318,19 @@ async function joinRoom(id: string) {
       ctx.hand = h.hand; ctx.handVersion = h.version;
       emitUno(ctx);
     })
+    // Çiz-Tahmin: çizim çizgileri veritabanına yazılmadan oyuncular arasında akar
+    .on('broadcast', { event: 'draw' }, ({ payload }: any) => { if (cur === ctx && payload) bus.emit('draw:stroke', payload); })
     .subscribe((status) => { if (status === 'SUBSCRIBED' && cur === ctx) scheduleRebuild(ctx); });
 
   ctx.hb = window.setInterval(async () => {
     if (cur !== ctx) return;
     const h = await rpc('heartbeat', { p_room: id });
-    if (h && h.ok === false && cur === ctx) { await rpc('join_room', { p_room: id }); scheduleRebuild(ctx); }
+    if (h && h.ok === false && cur === ctx) {
+      const j = await rpc('join_room', { p_room: id });
+      if (cur !== ctx) return;
+      if (j?.kicked || j?.banned) { bus.emit('room:kicked', j.error); return; }
+      scheduleRebuild(ctx);
+    }
   }, 20_000);
 
   const [snap, { data: msgs }, { data: gp }, { data: hand }] = await Promise.all([
@@ -230,7 +339,8 @@ async function joinRoom(id: string) {
     sb.from('game_public').select('*').eq('room_id', id).maybeSingle(),
     sb.from('game_hands').select('hand,version').eq('room_id', id).eq('user_id', uid).maybeSingle(),
   ]);
-  const chat = await Promise.all((msgs ?? []).reverse().map(toMsg));
+  const chat = await Promise.all((msgs ?? []).filter((m: any) => !(m.kind === 'chat' && blocked.has(m.user_id))).reverse().map(toMsg));
+  ctx.game = snap?.game;
   ctx.pub = gp; ctx.hand = hand?.hand ?? null; ctx.handVersion = hand?.version ?? -1;
   setTimeout(() => emitUno(ctx), 0);
   return { ok: true, room: snap, chat };
@@ -255,7 +365,10 @@ window.addEventListener('pagehide', () => {
     body: JSON.stringify({ p_room: cur.id }),
   }).catch(() => {});
 });
-sb.auth.onAuthStateChange((_e, s) => { (sb as any).auth.session = s; });
+sb.auth.onAuthStateChange((e, s) => {
+  (sb as any).auth.session = s;
+  if (e === 'PASSWORD_RECOVERY') { recovering = true; bus.emit('auth:recovery'); }
+});
 
 // ---------------------------------------------------------------- tek API
 export async function call<T = any>(event: string, p: any = {}): Promise<Res<T>> {
@@ -290,6 +403,8 @@ async function handle(event: string, p: any): Promise<any> {
     case 'seat:leave': return room ? rpc('leave_seat', { p_room: room }) : err('Odada değilsin');
     case 'seat:mute': return room ? rpc('set_mute', { p_room: room, p_muted: Boolean(p.muted) }) : err('Odada değilsin');
     case 'seat:lock': return room ? rpc('toggle_lock', { p_room: room, p_index: p.index }) : err('Odada değilsin');
+    case 'bot:add': return room ? rpc('add_bot', { p_room: room }) : err('Odada değilsin');
+    case 'bot:remove': return room ? rpc('remove_bot', { p_room: room, p_bot: p.id }) : err('Odada değilsin');
     case 'seat:kick': return room ? rpc('kick_seat', { p_room: room, p_user: p.userId }) : err('Odada değilsin');
     case 'chat:send': return room ? rpc('send_chat', { p_room: room, p_text: p.text }) : err('Odada değilsin');
     case 'gift:send': {
@@ -298,7 +413,7 @@ async function handle(event: string, p: any): Promise<any> {
       return r?.ok ? { ok: true, diamonds: r.diamonds } : err(r?.error ?? reason(r?.reason));
     }
     case 'gifts:list': {
-      const { data } = await sb.from('gifts').select('id,name,icon,price,tier').order('sort');
+      const { data } = await sb.from('gifts').select('id,name,icon,price,tier').eq('active', true).order('sort');
       return { ok: true, gifts: data ?? [] };
     }
     case 'daily:claim': {
@@ -307,7 +422,48 @@ async function handle(event: string, p: any): Promise<any> {
     }
     case 'profile:get': {
       const { data } = await sb.from('profiles').select('id,username,avatar,level,bio,charm,wealth').eq('id', p.id).maybeSingle();
-      return data ? { ok: true, profile: data } : err('Profil bulunamadı');
+      return data ? { ok: true, profile: data, blocked: blocked.has(data.id) } : err('Profil bulunamadı');
+    }
+    case 'status:get': {
+      const r = await rpc('my_status');
+      return r && !r.error ? { ok: true, admin: Boolean(r.admin), bannedUntil: r.banned_until, banReason: r.ban_reason, mutedUntil: r.muted_until ?? null } : err('Durum alınamadı');
+    }
+    case 'settings:get': return { ok: true, settings: await loadSettings() };
+    // ---- yönetim paneli (sunucuda _is_admin() ile korunur)
+    case 'admin:stats': { const r = await rpc('admin_stats'); return r?.error ? r : { ok: true, stats: r }; }
+    case 'admin:users': { const r = await rpc('admin_users', { p_q: p.q ?? '', p_filter: p.filter ?? 'all', p_offset: Math.max(0, Math.trunc(Number(p.offset) || 0)) }); return Array.isArray(r) ? { ok: true, users: r } : r; }
+    case 'admin:user': { const r = await rpc('admin_user_detail', { p_user: p.id }); return r?.profile ? { ok: true, detail: r } : err(r?.error ?? 'Kullanıcı bulunamadı'); }
+    case 'admin:editUser': return rpc('admin_update_user', { p_user: p.id, p_username: p.username ?? null, p_bio: p.bio ?? null, p_avatar: p.avatar ?? null, p_level: p.level == null ? null : Math.trunc(Number(p.level)) });
+    case 'admin:mute': return rpc('admin_mute', { p_user: p.id, p_minutes: Math.trunc(Number(p.minutes) || 0) });
+    case 'admin:setAdmin': return rpc('admin_set_admin', { p_user: p.id, p_on: Boolean(p.on) });
+    case 'admin:admins': { const r = await rpc('admin_list_admins'); return Array.isArray(r) ? { ok: true, admins: r } : r; }
+    case 'admin:kick': return rpc('admin_kick', { p_user: p.id, p_minutes: Math.trunc(Number(p.minutes) || 0) });
+    case 'admin:messages': { const r = await rpc('admin_messages', { p_q: p.q ?? '', p_room: p.room || null, p_user: p.user || null, p_before: p.before ?? null }); return Array.isArray(r) ? { ok: true, messages: r } : r; }
+    case 'admin:deleteMessage': return rpc('admin_delete_message', { p_id: p.id });
+    case 'admin:deleteUserMessages': return rpc('admin_delete_user_messages', { p_user: p.id });
+    case 'admin:room': { const r = await rpc('admin_room_detail', { p_room: p.id }); return r?.room ? { ok: true, detail: r } : err(r?.error ?? 'Oda bulunamadı'); }
+    case 'admin:editRoom': return rpc('admin_update_room', { p_room: p.id, p_name: p.name, p_topic: p.topic ?? '', p_game: p.game, p_permanent: Boolean(p.permanent) });
+    case 'admin:roomMessage': return rpc('admin_room_message', { p_room: p.id ?? '', p_text: p.text });
+    case 'admin:clearChat': return rpc('admin_clear_chat', { p_room: p.id });
+    case 'admin:stopGame': return rpc('admin_stop_game', { p_room: p.id });
+    case 'admin:freeSeat': return rpc('admin_free_seat', { p_room: p.id, p_seat: p.seat });
+    case 'admin:unbanRoom': return rpc('admin_unban_room', { p_room: p.id, p_user: p.user });
+    case 'admin:gifts': { const r = await rpc('admin_gifts'); return Array.isArray(r) ? { ok: true, gifts: r } : r; }
+    case 'admin:saveGift': return rpc('admin_save_gift', { p_id: p.id, p_name: p.name, p_icon: p.icon, p_price: Math.trunc(Number(p.price) || 0), p_tier: p.tier, p_sort: Math.trunc(Number(p.sort) || 0), p_active: p.active !== false });
+    case 'admin:getSetting': { const r = await rpc('admin_get_setting', { p_key: p.key }); return r?.ok === false ? r : { ok: true, value: r }; }
+    case 'admin:grant': return rpc('admin_grant', { p_user: p.id, p_diamonds: Math.trunc(Number(p.diamonds) || 0), p_coins: Math.trunc(Number(p.coins) || 0) });
+    case 'admin:ban': return rpc('admin_ban', { p_user: p.id, p_minutes: Math.trunc(Number(p.minutes) || 0), p_reason: p.reason ?? '' });
+    case 'admin:rooms': { const r = await rpc('admin_rooms'); return Array.isArray(r) ? { ok: true, rooms: r } : r; }
+    case 'admin:closeRoom': return rpc('admin_close_room', { p_room: p.id });
+    case 'admin:createRoom': return rpc('admin_create_room', { p_name: p.name, p_game: p.game, p_topic: p.topic ?? '' });
+    case 'admin:reports': { const r = await rpc('admin_reports', { p_status: p.status ?? 'open' }); return Array.isArray(r) ? { ok: true, reports: r } : r; }
+    case 'admin:resolve': return rpc('admin_resolve_report', { p_id: p.id, p_status: p.status });
+    case 'admin:setSetting': return rpc('admin_set_setting', { p_key: p.key, p_value: p.value });
+    case 'admin:log': { const r = await rpc('admin_log_list', { p_action: p.action || null, p_before: p.before ?? null }); return Array.isArray(r) ? { ok: true, log: r } : r; }
+    case 'profile:onboard': {
+      const r = await rpc('complete_onboarding', { p_username: String(p.username ?? '').trim(), p_avatar: p.avatar });
+      if (r?.ok) await profiles([uid], true);
+      return r?.ok ? r : err(r?.error ?? 'Profil kaydedilemedi');
     }
     case 'profile:update': {
       const patch: any = {};
@@ -354,6 +510,21 @@ async function handle(event: string, p: any): Promise<any> {
       await sb.from('friendships').delete().or(`and(requester.eq.${uid},addressee.eq.${p.id}),and(requester.eq.${p.id},addressee.eq.${uid})`);
       return { ok: true };
     }
+    case 'user:block': {
+      const r = await rpc('block_user', { p_target: p.id });
+      if (r?.ok) { blocked.add(p.id); bus.emit('block:changed', { id: p.id, blocked: true }); }
+      return r?.ok ? r : err(r?.error ?? 'Engellenemedi');
+    }
+    case 'user:unblock': {
+      const r = await rpc('unblock_user', { p_target: p.id });
+      if (r?.ok) { blocked.delete(p.id); bus.emit('block:changed', { id: p.id, blocked: false }); }
+      return r?.ok ? r : err(r?.error ?? 'Engel kaldırılamadı');
+    }
+    case 'user:report': {
+      const r = await rpc('report_user', { p_target: p.id, p_reason: p.reason, p_details: p.details ?? '', p_room: room ?? null });
+      return r?.ok ? r : err(r?.error ?? 'Şikayet gönderilemedi');
+    }
+    case 'room:kick': return room ? rpc('kick_from_room', { p_room: room, p_user: p.userId }) : err('Odada değilsin');
     case 'user:search': {
       const q = String(p.q ?? '').replace(/[%_,()*]/g, '').slice(0, 20);
       if (q.length < 2) return { ok: true, users: [] };
@@ -362,6 +533,16 @@ async function handle(event: string, p: any): Promise<any> {
     }
     case 'uno:start': return room ? fn('game', { room, action: 'start' }) : err('Odada değilsin');
     case 'uno:action': return room ? fn('game', { room, move: p }) : err('Odada değilsin');
+    case 'ludo:start': return room ? fn('ludo', { room, action: 'start' }) : err('Odada değilsin');
+    case 'game:start': return cur ? fn(refereeFor(cur.game), { room: cur.id, action: 'start' }) : err('Odada değilsin');
+    case 'game:move': return cur ? fn(refereeFor(cur.game), { room: cur.id, move: p }) : err('Odada değilsin');
+    case 'draw:send': {
+      if (!cur) return err('Odada değilsin');
+      cur.channel.send({ type: 'broadcast', event: 'draw', payload: { ...p, from: uid } });
+      return { ok: true };
+    }
+    case 'ludo:roll': return room ? fn('ludo', { room, move: { type: 'roll' } }) : err('Odada değilsin');
+    case 'ludo:move': return room ? fn('ludo', { room, move: { type: 'move', token: Number(p.token) } }) : err('Odada değilsin');
     case 'voice:token': {
       if (!room) return err('Odada değilsin');
       const r = await fn('voice', { room });

@@ -3,12 +3,16 @@ import { useApp } from '../App';
 import { bus, call, Profile } from '../net';
 import { joinVoice, leaveVoice, onVoice, setMic, unlockAudio, VoiceStatus } from '../voice';
 import UnoTable, { UnoView } from '../components/Uno';
+import GameTable from '../components/GameTable';
+import { BOT_GAMES, meta, type GameId } from '../games';
 import { GiftFx, GiftSheet } from '../components/Gifts';
 import UserCard from '../components/UserCard';
+import { IconBack, IconGift, IconLock, IconMic, IconMicOff, IconSeatDown, IconSend, IconSofa } from '../components/Icons';
+import Avatar from '../components/Avatar';
 
 interface SeatView { userId?: string; muted?: boolean; profile?: Profile | null; locked: boolean }
 interface RoomState {
-  id: string; name: string; topic: string; game: 'uno' | 'chat'; online: number; ownerId: string | null; voice: boolean;
+  id: string; name: string; topic: string; game: string; online: number; ownerId: string | null; voice: boolean;
   seats: SeatView[]; members: Profile[]; unoPlayers: string[]; playing: boolean;
 }
 interface ChatMsg { id: number; from: Profile | null; text: string; kind: 'chat' | 'system' | 'gift'; at: number }
@@ -20,10 +24,12 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
   const [room, setRoom] = useState<RoomState | null>(null);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [uno, setUno] = useState<UnoView | null>(null);
+  const [gv, setGv] = useState<any | null>(null);
   const [text, setText] = useState('');
   const [card, setCard] = useState<string | null>(null);
   const [giftTo, setGiftTo] = useState<string | null | undefined>(undefined);
   const [seatMenu, setSeatMenu] = useState<number | null>(null);
+  const [botMenu, setBotMenu] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState<Set<string>>(new Set());
   const [vstatus, setVstatus] = useState<VoiceStatus>('off');
   const [showMembers, setShowMembers] = useState(false);
@@ -42,24 +48,38 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     const onState = (x: RoomState) => setRoom(x);
     const onMsg = (m: ChatMsg) => setChat(c => [...c.slice(-80), m]);
     const onUno = (v: UnoView | null) => setUno(v);
-    bus.on('room:state', onState); bus.on('chat:msg', onMsg); bus.on('uno:state', onUno);
+    const onGame = (v: any | null) => setGv(v);
+    const onKicked = (why?: string) => { toast(why || 'Odadan atıldın'); onExit(); };
+    const onBlock = (b: { id: string; blocked: boolean }) => { if (b.blocked) setChat(c => c.filter(m => !(m.kind === 'chat' && m.from?.id === b.id))); };
+    const onClear = () => setChat([]);
+    const onDel = (d: { id?: number; userId?: string }) => setChat(c => c.filter(m => !(d.id ? m.id === d.id : m.kind === 'chat' && m.from?.id === d.userId)));
+    bus.on('chat:clear', onClear); bus.on('chat:delete', onDel);
+    bus.on('room:kicked', onKicked); bus.on('block:changed', onBlock);
+    bus.on('room:state', onState); bus.on('chat:msg', onMsg); bus.on('uno:state', onUno); bus.on('game:state', onGame);
     join();
     const off = onVoice((sp, st) => { setSpeaking(new Set(sp)); setVstatus(st); });
     return () => {
       alive = false;
-      bus.off('room:state', onState); bus.off('chat:msg', onMsg); bus.off('uno:state', onUno);
+      bus.off('chat:clear', onClear); bus.off('chat:delete', onDel);
+      bus.off('room:kicked', onKicked); bus.off('block:changed', onBlock);
+      bus.off('room:state', onState); bus.off('chat:msg', onMsg); bus.off('uno:state', onUno); bus.off('game:state', onGame);
       off(); leaveVoice(); call('room:leave');
     };
   }, [roomId]);
 
   useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }); }, [chat.length]);
 
-  const people = useMemo(() => new Map((room?.members ?? []).map(m => [m.id, m])), [room?.members]);
+  // odadakiler + koltuktakiler (botlar odaya "girmez" ama masada oynar)
+  const people = useMemo(() => {
+    const m = new Map((room?.members ?? []).map(x => [x.id, x]));
+    for (const s of room?.seats ?? []) if (s.profile && !m.has(s.profile.id)) m.set(s.profile.id, s.profile);
+    return m;
+  }, [room?.members, room?.seats]);
   const mySeat = room?.seats.findIndex(s => s.userId === me.id) ?? -1;
   const seated = mySeat >= 0;
   const myMuted = seated ? Boolean(room!.seats[mySeat].muted) : true;
   const isOwner = room?.ownerId === me.id;
-  const gameOn = Boolean(uno);
+  const gameOn = room?.game === 'uno' ? Boolean(uno) : Boolean(gv);
 
   // mikrofon durumu koltuk/sessiz durumunu takip eder
   useEffect(() => {
@@ -73,6 +93,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
   async function seatTap(i: number) {
     unlockAudio();
     const s = room!.seats[i];
+    if (s.userId && s.profile?.is_bot) return setBotMenu(s.userId);
     if (s.userId) return setCard(s.userId);
     if (isOwner) return setSeatMenu(i);
     if (s.locked) return toast('Bu koltuk kilitli 🔒');
@@ -88,14 +109,16 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     if (!r.ok && r.error !== 'Çok hızlı') toast(r.error!);
   }
 
-  async function startUno() {
-    const r = await call('uno:start');
+  async function startGame() {
+    const r = await call(room?.game === 'uno' ? 'uno:start' : 'game:start');
     if (!r.ok) toast(r.error!);
   }
 
   if (!room) return <div className="room loading"><div className="spinner" /></div>;
 
   const seatedCount = room.seats.filter(s => s.userId).length;
+  const gm = meta(room.game);
+  const maxPlayers = gm.max;
 
   const Seat = ({ s, i }: { s: SeatView; i: number }) => {
     const p = s.profile;
@@ -104,10 +127,11 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
     return (
       <button className={`seat ${i === 0 ? 'host' : ''} ${talking ? 'talking' : ''} ${p ? 'filled' : ''}`} onClick={() => seatTap(i)}>
         <div className="seat-av">
-          {p ? <span>{p.avatar}</span> : s.locked ? <span className="lock">🔒</span> : <span className="plus">＋</span>}
-          {p && s.muted && <i className="muted-ic">🔇</i>}
+          {p ? <span className="seat-face"><Avatar value={p.avatar} /></span> : s.locked ? <span className="lock"><IconLock size={20} /></span> : <span className="plus"><IconSofa size={24} /></span>}
+          {p && s.muted && <i className="muted-ic"><IconMicOff size={11} /></i>}
           {p && room.ownerId === p.id && <i className="crown-ic">👑</i>}
-          {inGame && <i className="game-ic">🎴</i>}
+          {p?.is_bot && <i className="bot-ic">BOT</i>}
+          {inGame && <i className="game-ic">{gm.icon}</i>}
         </div>
         <small>{p ? p.username : i === 0 ? 'Ev sahibi' : `${i}`}</small>
       </button>
@@ -115,15 +139,18 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
   };
 
   return (
-    <div className={`room ${gameOn ? 'gaming' : ''}`} onClick={unlockAudio}>
+    <div className={`room tone-${room.game} ${gameOn ? 'gaming' : ''}`} onClick={unlockAudio}>
       <header className="room-head">
-        <button className="icon-btn" onClick={onExit}>‹</button>
+        <button className="icon-btn back" onClick={onExit} aria-label="Geri"><IconBack size={22} /></button>
         <div className="room-title">
-          <b>{room.name}</b>
-          <small>ID {room.id} · {room.voice ? (vstatus === 'on' ? '🔊 Ses açık' : vstatus === 'connecting' ? '⏳ Ses bağlanıyor' : vstatus === 'error' ? '⚠️ Ses hatası' : '🔈') : '🔈 Ses kapalı'}</small>
+          <span className="rt-cover">{gm.icon}</span>
+          <div>
+            <b>{room.name}</b>
+            <small>ID {room.id} · {room.voice ? (vstatus === 'on' ? '🔊 Ses açık' : vstatus === 'connecting' ? '⏳ Bağlanıyor' : vstatus === 'error' ? '⚠️ Ses hatası' : '🔈') : '🔈 Ses kapalı'}</small>
+          </div>
         </div>
         <button className="online-btn" onClick={() => setShowMembers(true)}>
-          <span className="stack">{room.members.slice(0, 3).map(m => <i key={m.id}>{m.avatar}</i>)}</span>{room.online}
+          <span className="stack">{room.members.slice(0, 3).map(m => <i key={m.id}><Avatar value={m.avatar} /></i>)}</span>{room.online}
         </button>
       </header>
 
@@ -133,13 +160,19 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
       </div>
 
       <div className="stage">
-        {room.game === 'uno' && uno ? <UnoTable view={uno} people={people} /> : room.game === 'uno' ? (
+        {room.game === 'uno' && uno ? <UnoTable view={uno} people={people} />
+          : room.game !== 'uno' && gv ? <GameTable game={room.game} view={gv} people={people} />
+          : room.game !== 'chat' ? (
           <div className="uno-lobby">
-            <div className="uno-logo">🎴 UNO</div>
-            <p>Koltuktaki oyuncular oynar · <b>{Math.min(seatedCount, 6)}/6</b> hazır</p>
+            <div className="uno-logo">{gm.icon} {gm.name.toLocaleUpperCase('tr-TR')}</div>
+            <p>Koltuktaki oyuncular oynar · <b>{Math.min(seatedCount, maxPlayers)}/{maxPlayers}</b> hazır</p>
+            <small>{gm.desc}</small>
+            {BOT_GAMES.includes(room.game as GameId) && (isOwner || (!room.ownerId && seated)) && seatedCount < maxPlayers && (
+              <button className="btn ghost bot-add" onClick={async () => { const r = await call('bot:add'); if (!r.ok) toast(r.error!); }}>🤖 Bot ekle</button>
+            )}
             {isOwner || !room.ownerId ? (
-              <button className="btn gold big" disabled={seatedCount < 2 || !seated} onClick={startUno}>
-                {!seated ? 'Başlatmak için koltuğa otur' : seatedCount < 2 ? 'En az 2 oyuncu gerekli' : 'Oyunu başlat ▶'}
+              <button className="btn gold big" disabled={seatedCount < gm.min || !seated} onClick={startGame}>
+                {!seated ? 'Başlatmak için koltuğa otur' : seatedCount < gm.min ? `En az ${gm.min} oyuncu gerekli` : 'Oyunu başlat ▶'}
               </button>
             ) : <p className="muted">Oda sahibinin başlatması bekleniyor…</p>}
           </div>
@@ -152,7 +185,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
         <div className="chat-note">🛡️ Saygılı ol. Hakaret ve spam yasaktır.</div>
         {chat.map(m => (
           <div key={m.id} className={`msg k-${m.kind}`}>
-            {m.from && <b onClick={() => setCard(m.from!.id)}>{m.from.avatar} {m.from.username}{m.kind === 'chat' ? ':' : ''}</b>} {m.text}
+            {m.from && <b onClick={() => setCard(m.from!.id)}><i className="lvc">Lv.{m.from.level}</i><Avatar value={m.from.avatar} className="inline" /> {m.from.username}{m.kind === 'chat' ? ':' : ''}</b>} {m.text}
           </div>
         ))}
       </div>
@@ -162,14 +195,16 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
       <footer className="room-bar">
         <form onSubmit={e => { e.preventDefault(); send(); }}>
           <input value={text} onChange={e => setText(e.target.value)} placeholder="Bir şey söyle…" maxLength={200} />
+          {text.trim() && <button className="send-btn" aria-label="Gönder"><IconSend size={18} /></button>}
         </form>
         {seated && (
-          <button className={`icon-btn mic ${myMuted ? 'off' : 'on'}`} onClick={() => call('seat:mute', { muted: !myMuted })}>
-            {myMuted ? '🔇' : '🎤'}
+          <button className={`icon-btn mic ${myMuted ? 'off' : 'on'}`} aria-label={myMuted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
+            onClick={() => call('seat:mute', { muted: !myMuted })}>
+            {myMuted ? <IconMicOff size={20} /> : <IconMic size={20} />}
           </button>
         )}
-        {seated && !room.unoPlayers.includes(me.id) && <button className="icon-btn" title="Koltuktan in" onClick={() => call('seat:leave')}>⬇️</button>}
-        <button className="icon-btn gift-btn" onClick={() => setGiftTo(null)}>🎁</button>
+        {seated && !room.unoPlayers.includes(me.id) && <button className="icon-btn" aria-label="Koltuktan in" title="Koltuktan in" onClick={() => call('seat:leave')}><IconSeatDown size={20} /></button>}
+        <button className="icon-btn gift-btn" aria-label="Hediye gönder" onClick={() => setGiftTo(null)}><IconGift size={22} /></button>
       </footer>
 
       <GiftFx />
@@ -179,10 +214,25 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
           onGift={() => { setGiftTo(card); setCard(null); }}
           onKick={isOwner && room.seats.some(s => s.userId === card) ? async () => {
             const r = await call('seat:kick', { userId: card }); if (!r.ok) toast(r.error!); setCard(null);
+          } : undefined}
+          onRoomKick={isOwner && card !== me.id && room.members.some(m => m.id === card) ? async () => {
+            const r = await call('room:kick', { userId: card }); toast(r.ok ? 'Kullanıcı odadan atıldı' : r.error!); setCard(null);
           } : undefined} />
       )}
       {giftTo !== undefined && (
         <GiftSheet members={room.members} initialTo={giftTo ?? undefined} roomOwner={room.ownerId} onClose={() => setGiftTo(undefined)} />
+      )}
+      {botMenu && (
+        <div className="sheet-bg" onClick={() => setBotMenu(null)}>
+          <div className="sheet action-sheet" onClick={e => e.stopPropagation()}>
+            <h3>🤖 {room.seats.find(x => x.userId === botMenu)?.profile?.username ?? 'Bot'}</h3>
+            <p className="muted center">Bu oyuncu bir bot. Hamlelerini sunucu yapar.</p>
+            {(isOwner || (!room.ownerId && seated)) && !room.playing && (
+              <button onClick={async () => { const r = await call('bot:remove', { id: botMenu }); if (!r.ok) toast(r.error!); setBotMenu(null); }}>🪑 Botu masadan kaldır</button>
+            )}
+            <button className="cancel" onClick={() => setBotMenu(null)}>Kapat</button>
+          </div>
+        </div>
       )}
       {seatMenu !== null && (
         <div className="sheet-bg" onClick={() => setSeatMenu(null)}>
@@ -200,7 +250,7 @@ export default function RoomScreen({ roomId, onExit }: { roomId: string; onExit:
             <h3>Odadakiler ({room.members.length})</h3>
             {room.members.map(m => (
               <div key={m.id} className="row" onClick={() => { setShowMembers(false); setCard(m.id); }}>
-                <span className="av">{m.avatar}</span><div className="grow"><b>{m.username}</b><small>Lv.{m.level}</small></div>
+                <span className="av"><Avatar value={m.avatar} /></span><div className="grow"><b>{m.username}</b><small>Lv.{m.level}</small></div>
                 {room.ownerId === m.id && <span>👑</span>}
               </div>
             ))}

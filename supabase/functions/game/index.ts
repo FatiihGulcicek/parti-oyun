@@ -7,6 +7,7 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
   auth: { persistSession: false, autoRefreshToken: false },
 });
 const TURN_MS = 25_000;
+const BOT_MS = 1_000; // botun düşünme süresi
 const ALIVE_MS = 60_000;
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -52,13 +53,20 @@ Deno.serve(async (req) => {
       admin.from('room_presence').select('user_id,last_seen').eq('room_id', roomId),
     ]);
     if (!room) return fail('Oda bulunamadı');
+    if (room.game !== 'uno') return fail('Bu oda Uno odası değil');
     const present = new Set((pres ?? []).filter((p: any) => Date.now() - Date.parse(p.last_seen) < ALIVE_MS).map((p: any) => p.user_id));
     if (!present.has(uid)) return fail('Odada değilsin');
     const seated: string[] = (room.seats as (string | null)[]).filter((x): x is string => Boolean(x));
+    // botlar odada "hazır" sayılır; hamlelerini hakem yapar
+    const { data: botRows } = seated.length ? await admin.from('profiles').select('id').in('id', seated).eq('is_bot', true) : { data: [] as any[] };
+    const bots = new Set<string>((botRows ?? []).map((b: any) => b.id));
+    for (const b of bots) present.add(b);
 
     // ---- yeni oyun
     if (body.action === 'start') {
-      if (room.game !== 'uno') return fail('Bu oda Uno odası değil');
+      // yönetim panelinden kapatılan oyun yeni el başlatamaz
+      const { data: gs } = await admin.from('app_settings').select('value').eq('key', 'games').maybeSingle();
+      if (((gs?.value as any)?.disabled ?? []).includes(room.game)) return fail('Bu oyun şu an yönetici tarafından kapatıldı');
       if (!seated.includes(uid)) return fail('Başlatmak için koltuğa otur');
       if (room.owner_id && room.owner_id !== uid) return fail('Oyunu oda sahibi başlatır');
       const { data: old } = await admin.from('games').select('state,version').eq('room_id', roomId).maybeSingle();
@@ -67,7 +75,7 @@ Deno.serve(async (req) => {
       if (players.length < 2) return fail('En az 2 oturan oyuncu gerekli');
       const s = Uno.newGame(players);
       const version = (old?.version ?? 0) + 1;
-      const deadline = Date.now() + TURN_MS;
+      const deadline = Date.now() + (bots.has(Uno.current(s)) ? BOT_MS : TURN_MS);
       const { error } = await admin.from('games').upsert({
         room_id: roomId, state: s, version, deadline: new Date(deadline).toISOString(), updated_at: new Date().toISOString(),
       });
@@ -102,8 +110,13 @@ Deno.serve(async (req) => {
           if (Date.now() < deadline - 500 && !purged) return fail('Süre dolmadı');
           if (Date.now() >= deadline - 500) {
             const who = Uno.current(s);
-            Uno.autoMove(s);
-            msgs.push(`⏰ ${n.get(who) ?? 'Oyuncu'} süresi doldu, otomatik kart çekildi`);
+            if (bots.has(who)) {
+              Uno.botMove(s);
+              if (s.unoVulnerable === null && s.hands[who]?.length === 1) msgs.push(`🤖 ${n.get(who) ?? 'Bot'}: UNO!`);
+            } else {
+              Uno.autoMove(s);
+              msgs.push(`⏰ ${n.get(who) ?? 'Oyuncu'} süresi doldu, otomatik kart çekildi`);
+            }
           }
         } else {
           const move = body.move as Uno.UnoAction;
@@ -117,6 +130,7 @@ Deno.serve(async (req) => {
       if (s.winner) msgs.push(`🏆 ${n.get(s.winner) ?? 'Bir oyuncu'} Uno'yu kazandı!`);
       if (purged || body.action === 'timeout' || Uno.current(s) !== before.turn || s.drewThisTurn !== before.drew)
         deadline = Date.now() + TURN_MS;
+      if (!s.winner && bots.has(Uno.current(s))) deadline = Date.now() + BOT_MS;
 
       const version = g.version + 1;
       const { data: upd } = await admin.from('games')

@@ -5,7 +5,7 @@
   "scripts": {
     "build": "npm --prefix client run build",
     "dev": "npm --prefix client run dev",
-    "test": "vitest run supabase/functions"
+    "test": "vitest run supabase/functions client/src"
   },
   "engines": {
     "node": ">=20"
